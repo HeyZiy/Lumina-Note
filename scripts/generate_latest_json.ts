@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { getChangelogForVersion } from './parse_changelog';
 
 // Script to generate latest.json for Tauri v2 updater.
 // Supports macOS (aarch64, x86_64) and Windows (x64).
@@ -84,8 +85,15 @@ function addPlatform(
 
 function generate(): void {
     const version = getVersion();
-    const notes = `Lumina Note version ${version}`;
     const pub_date = new Date().toISOString();
+
+    // 从 CHANGELOG.md 获取更新日志
+    const changelogEntry = getChangelogForVersion(version);
+    const notes = changelogEntry?.content || `Lumina Note version ${version}`;
+
+    if (!changelogEntry) {
+        console.warn(`[updater] Warning: No changelog found for version ${version}, using default notes.`);
+    }
 
     const repo = process.env.GITHUB_REPOSITORY || "blueberrycongee/Lumina-Note";
     const baseUrl = `https://github.com/${repo}/releases/download/v${version}`;
