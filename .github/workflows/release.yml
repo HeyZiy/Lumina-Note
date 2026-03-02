@@ -6,7 +6,24 @@ on:
       - 'v*'
 
 jobs:
+  check-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check changelog exists for this version
+        run: npx ts-node scripts/parse_changelog.ts check "${{ github.ref_name }}"
+
   release:
+    needs: check-changelog
     permissions:
       contents: write
     strategy:
