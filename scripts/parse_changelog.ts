@@ -74,7 +74,9 @@ export function hasChangelogForVersion(version: string, changelogPath?: string):
 }
 
 // CLI 模式
-if (require.main === module) {
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+
+if (isMainModule) {
   const args = process.argv.slice(2);
   const command = args[0];
   const version = args[1];
