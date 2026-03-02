@@ -771,7 +771,7 @@ export function Sidebar() {
         <button 
           onClick={handleQuickNote}
           disabled={!vaultPath}
-          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground bg-background/45 hover:bg-accent/60 border border-border/60 rounded-ui-md transition-colors shadow-ui-card/70 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-0"
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground bg-background hover:bg-accent border border-border rounded-md transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-0"
           title={t.file.quickNote}
         >
           <Calendar size={14} />
