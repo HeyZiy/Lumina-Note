@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.21] - 2026-03-02
+
+### 新功能
+- 设置中新增编辑器字体大小调节（10-32px 滑块 + 实时预览）
+
+### 修复
+- 代码块字体现在跟随编辑器字体设置（-2px 偏移）
+
 ## [0.5.20] - 2026-03-02
 
 ### 新功能
