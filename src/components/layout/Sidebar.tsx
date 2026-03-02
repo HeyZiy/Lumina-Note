@@ -1467,10 +1467,10 @@ function FileTreeItem({
       onClick={() => onSelect(entry)}
       onContextMenu={(e) => onContextMenu(e, entry)}
       className={cn(
-        "w-full flex items-center gap-1.5 py-1.5 pr-2 transition-colors text-sm cursor-grab select-none rounded-ui-sm",
+        "w-full flex items-center gap-1.5 py-1.5 pr-2 transition-colors text-sm cursor-grab select-none rounded-ui-sm border border-transparent",
         showActive
-          ? "bg-primary/12 text-primary shadow-[inset_2px_0_0_hsl(var(--primary)/0.6)]"
-          : "hover:bg-accent/50 hover:text-foreground"
+          ? "bg-accent/70 text-foreground font-medium border-border/45"
+          : "text-muted-foreground hover:bg-accent/45 hover:text-foreground"
       )}
       style={{ paddingLeft: paddingLeft + 20 }}
     >
