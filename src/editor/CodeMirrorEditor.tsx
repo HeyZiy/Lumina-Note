@@ -79,6 +79,7 @@ export interface CodeMirrorEditorRef {
 
 const createEditorTheme = (fontSize: number) => EditorView.theme({
   "&": { backgroundColor: "transparent", fontSize: `${fontSize}px`, height: "100%" },
+  ".cm-code-block-widget pre": { fontSize: `${Math.max(10, fontSize - 2)}px` },
   ".cm-content": { fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", padding: "16px 0", caretColor: "hsl(var(--foreground))" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "hsl(var(--foreground))" },
   ".cm-line": { padding: "0 16px", paddingLeft: "16px", lineHeight: "1.75", position: "relative" },
@@ -358,7 +359,7 @@ class CodeBlockWidget extends WidgetType {
     const c = document.createElement("div");
     c.className = "cm-code-block-widget relative group";
     c.dataset.widgetType = "codeblock";
-    c.innerHTML = `<pre class="p-3 m-0 overflow-auto text-sm"><code class="hljs font-mono ${this.language ? 'language-' + this.language : ''}"></code></pre>`;
+    c.innerHTML = `<pre class="p-3 m-0 overflow-auto"><code class="hljs font-mono ${this.language ? 'language-' + this.language : ''}"></code></pre>`;
     const codeEl = c.querySelector("code")!;
     if (this.language && lowlight.registered(this.language)) {
       try { const tree = lowlight.highlight(this.language, this.code); this.hastToDOM(tree.children, codeEl); } catch { }
