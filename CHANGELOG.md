@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.22] - 2026-03-02
+
+### 修复
+- 侧边栏快速笔记/语音笔记按钮文字现在正常显示
+- 收藏夹标题不再换行
+- AI 欢迎语不再换行
+- AI 输入框 placeholder 不再换行
+
 ## [0.5.21] - 2026-03-02
 
 ### 新功能
