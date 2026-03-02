@@ -34,7 +34,7 @@ interface SettingsModalProps {
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { t } = useLocaleStore();
-  const { themeId, setThemeId, editorMode, setEditorMode } = useUIStore();
+  const { themeId, setThemeId, editorMode, setEditorMode, editorFontSize, setEditorFontSize } = useUIStore();
   const { config } = useAIStore();
   const { hideAllWebViews, showAllWebViews } = useBrowserStore();
   const { vaultPath, fileTree } = useFileStore();
@@ -279,6 +279,40 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <option value="source">{t.settingsModal.sourceMode}</option>
                 <option value="reading">{t.settingsModal.readingMode}</option>
               </select>
+            </div>
+
+            {/* 字体大小 */}
+            <div className="py-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{t.settingsModal.editorFontSize}</p>
+                  <p className="text-sm text-muted-foreground">{t.settingsModal.editorFontSizeDesc}</p>
+                </div>
+                <span className="text-sm font-mono bg-muted px-2 py-1 rounded">{editorFontSize}px</span>
+              </div>
+
+              {/* Slider */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground w-6">10</span>
+                <input
+                  type="range"
+                  min={10}
+                  max={32}
+                  value={editorFontSize}
+                  onChange={(e) => setEditorFontSize(Number(e.target.value))}
+                  className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                />
+                <span className="text-xs text-muted-foreground w-6">32</span>
+              </div>
+
+              {/* Preview */}
+              <div
+                className="p-3 rounded-lg border border-border bg-background/60"
+                style={{ fontSize: `${editorFontSize}px` }}
+              >
+                <p className="leading-relaxed">The quick brown fox</p>
+                <p className="leading-relaxed">敏捷的棕色狐狸 123</p>
+              </div>
             </div>
           </section>
 
