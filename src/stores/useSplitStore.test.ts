@@ -129,6 +129,100 @@ describe('useSplitStore', () => {
     });
   });
 
+  describe('promoteSecondaryToPrimary', () => {
+    it('should return null when no secondary file is open', async () => {
+      const store = useSplitStore.getState();
+      const promoted = await store.promoteSecondaryToPrimary();
+
+      expect(promoted).toBeNull();
+    });
+
+    it('should promote markdown secondary file and reset split state', async () => {
+      useSplitStore.setState({
+        activePane: 'secondary',
+        secondaryFile: '/path/to/second.md',
+        secondaryFileType: 'markdown',
+        secondaryContent: '# Second',
+        secondaryIsDirty: false,
+      });
+
+      const store = useSplitStore.getState();
+      const promoted = await store.promoteSecondaryToPrimary();
+
+      expect(promoted).toEqual({
+        path: '/path/to/second.md',
+        fileType: 'markdown',
+        page: 1,
+        annotationId: null,
+      });
+
+      const state = useSplitStore.getState();
+      expect(state.secondaryFile).toBeNull();
+      expect(state.secondaryContent).toBe('');
+      expect(state.secondaryIsDirty).toBe(false);
+      expect(state.activePane).toBe('primary');
+    });
+
+    it('should persist dirty markdown before promoting', async () => {
+      vi.mocked(saveFile).mockResolvedValue(undefined);
+
+      useSplitStore.setState({
+        secondaryFile: '/path/to/dirty.md',
+        secondaryFileType: 'markdown',
+        secondaryContent: 'Dirty content',
+        secondaryIsDirty: true,
+      });
+
+      const store = useSplitStore.getState();
+      const promoted = await store.promoteSecondaryToPrimary();
+
+      expect(saveFile).toHaveBeenCalledWith('/path/to/dirty.md', 'Dirty content');
+      expect(promoted).toEqual({
+        path: '/path/to/dirty.md',
+        fileType: 'markdown',
+        page: 1,
+        annotationId: null,
+      });
+    });
+
+    it('should not promote when dirty markdown save fails', async () => {
+      vi.mocked(saveFile).mockRejectedValue(new Error('save failed'));
+
+      useSplitStore.setState({
+        secondaryFile: '/path/to/dirty.md',
+        secondaryFileType: 'markdown',
+        secondaryContent: 'Dirty content',
+        secondaryIsDirty: true,
+      });
+
+      const store = useSplitStore.getState();
+      const promoted = await store.promoteSecondaryToPrimary();
+
+      expect(promoted).toBeNull();
+      expect(useSplitStore.getState().secondaryFile).toBe('/path/to/dirty.md');
+      expect(useSplitStore.getState().secondaryIsDirty).toBe(true);
+    });
+
+    it('should promote PDF secondary file with page and annotation', async () => {
+      useSplitStore.setState({
+        secondaryFile: '/path/to/doc.pdf',
+        secondaryFileType: 'pdf',
+        secondaryPdfPage: 7,
+        secondaryPdfAnnotationId: 'ann-77',
+      });
+
+      const store = useSplitStore.getState();
+      const promoted = await store.promoteSecondaryToPrimary();
+
+      expect(promoted).toEqual({
+        path: '/path/to/doc.pdf',
+        fileType: 'pdf',
+        page: 7,
+        annotationId: 'ann-77',
+      });
+    });
+  });
+
   describe('openSecondaryFile', () => {
     it('should load file content', async () => {
       vi.mocked(readFile).mockResolvedValue('# Test Content');

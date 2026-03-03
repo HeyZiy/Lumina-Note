@@ -33,6 +33,12 @@ interface SplitState {
   updateSecondaryContent: (content: string) => void;
   saveSecondary: () => Promise<void>;
   closeSecondary: () => void;
+  promoteSecondaryToPrimary: () => Promise<{
+    path: string;
+    fileType: SplitFileType;
+    page: number;
+    annotationId: string | null;
+  } | null>;
   swapPanels: () => void;
   reloadSecondaryIfOpen: (path: string, options?: { skipIfDirty?: boolean }) => Promise<void>;
 }
@@ -123,6 +129,44 @@ export const useSplitStore = create<SplitState>((set, get) => ({
       secondaryPdfAnnotationId: null,
       activePane: 'primary', // 关闭分栏后重置为主面板
     });
+  },
+
+  promoteSecondaryToPrimary: async () => {
+    const {
+      secondaryFile,
+      secondaryFileType,
+      secondaryIsDirty,
+      secondaryPdfPage,
+      secondaryPdfAnnotationId,
+    } = get();
+    if (!secondaryFile) return null;
+
+    // Ensure unsaved markdown edits are persisted before promoting.
+    if (secondaryFileType === "markdown" && secondaryIsDirty) {
+      await get().saveSecondary();
+      if (get().secondaryIsDirty) {
+        return null;
+      }
+    }
+
+    const result = {
+      path: secondaryFile,
+      fileType: secondaryFileType,
+      page: secondaryPdfPage,
+      annotationId: secondaryPdfAnnotationId,
+    };
+
+    set({
+      secondaryFile: null,
+      secondaryFileType: "markdown",
+      secondaryContent: "",
+      secondaryIsDirty: false,
+      secondaryPdfPage: 1,
+      secondaryPdfAnnotationId: null,
+      activePane: "primary",
+    });
+
+    return result;
   },
 
   swapPanels: () => {

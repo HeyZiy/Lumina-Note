@@ -101,12 +101,15 @@ export function SplitEditor() {
     isDirty,
     isLoadingFile,
     updateContent,
+    openFile,
+    openPDFTab,
   } = useFileStore();
 
   const {
     splitDirection,
     setSplitDirection,
     toggleSplitView,
+    setSplitView,
   } = useUIStore();
 
   const {
@@ -121,6 +124,7 @@ export function SplitEditor() {
     setActivePane,
     updateSecondaryContent,
     closeSecondary,
+    promoteSecondaryToPrimary,
   } = useSplitStore();
   
   const { setHighlightedAnnotation } = usePDFAnnotationStore();
@@ -147,6 +151,28 @@ export function SplitEditor() {
   const handleSecondaryChange = useCallback((content: string) => {
     updateSecondaryContent(content);
   }, [updateSecondaryContent]);
+
+  const handleCloseSecondaryPane = useCallback(() => {
+    closeSecondary();
+    setSplitView(false);
+  }, [closeSecondary, setSplitView]);
+
+  const handleClosePrimaryPane = useCallback(async () => {
+    if (!secondaryFile) {
+      setSplitView(false);
+      return;
+    }
+
+    const promoted = await promoteSecondaryToPrimary();
+    if (!promoted) return;
+
+    if (promoted.fileType === "pdf") {
+      openPDFTab(promoted.path);
+    } else {
+      await openFile(promoted.path);
+    }
+    setSplitView(false);
+  }, [secondaryFile, setSplitView, promoteSecondaryToPrimary, openPDFTab, openFile]);
 
   const isHorizontal = splitDirection === "horizontal";
   
@@ -256,7 +282,9 @@ export function SplitEditor() {
             isDirty={isDirty}
             isLoading={isLoadingFile}
             onContentChange={handlePrimaryChange}
-            isPrimary
+            onClose={() => {
+              void handleClosePrimaryPane();
+            }}
           />
         </div>
 
@@ -298,7 +326,7 @@ export function SplitEditor() {
             <div className="flex-1 flex flex-col overflow-hidden relative">
               {/* Close button for PDF */}
               <button
-                onClick={closeSecondary}
+                onClick={handleCloseSecondaryPane}
                 className="absolute top-2 right-2 z-10 p-1 bg-background/80 hover:bg-accent rounded transition-colors text-muted-foreground hover:text-foreground"
                 title={t.layout.closePanel}
               >
@@ -316,7 +344,7 @@ export function SplitEditor() {
               isDirty={secondaryIsDirty}
               isLoading={isLoadingSecondary}
               onContentChange={handleSecondaryChange}
-              onClose={closeSecondary}
+              onClose={handleCloseSecondaryPane}
             />
           )}
         </div>
