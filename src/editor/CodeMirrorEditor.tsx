@@ -25,11 +25,12 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Table } from "@lezer/markdown";
 import { syntaxTree } from "@codemirror/language";
 import katex from "katex";
-import { common, createLowlight } from "lowlight";
 import mermaid from "mermaid";
 import { PLUGIN_EDITOR_SELECTION_EVENT, pluginEditorRuntime } from "@/services/plugins/editorRuntime";
 import {
   checkUpdateAction,
+  codeBlockEditorPlugin,
+  codeBlockField,
   collapseOnSelectionFacet,
   tableField,
   tableEditorPlugin,
@@ -37,9 +38,6 @@ import {
   setMouseSelecting,
   shouldShowSource
 } from "codemirror-live-markdown";
-
-// Initialize lowlight
-const lowlight = createLowlight(common);
 
 // Initialize mermaid
 mermaid.initialize({
@@ -79,7 +77,7 @@ export interface CodeMirrorEditorRef {
 
 const createEditorTheme = (fontSize: number) => EditorView.theme({
   "&": { backgroundColor: "transparent", fontSize: `${fontSize}px`, height: "100%" },
-  ".cm-code-block-widget pre": { fontSize: `${Math.max(10, fontSize - 2)}px` },
+  ".cm-codeblock-widget pre": { fontSize: `${Math.max(10, fontSize - 2)}px` },
   ".cm-content": { fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", padding: "16px 0", caretColor: "hsl(var(--foreground))" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "hsl(var(--foreground))" },
   ".cm-line": { padding: "0 16px", paddingLeft: "16px", lineHeight: "1.75", position: "relative" },
@@ -227,6 +225,56 @@ const createEditorTheme = (fontSize: number) => EditorView.theme({
   },
   ".cm-table-source": { fontFamily: "'JetBrains Mono', monospace !important", whiteSpace: "pre", color: "hsl(var(--foreground))", display: "block", overflowX: "auto", backgroundColor: "rgba(59, 130, 246, 0.1)" },
 
+  // === Code Block 样式（codemirror-live-markdown）===
+  ".cm-codeblock-widget": {
+    display: "block",
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "hsl(var(--muted))",
+    borderRadius: "6px",
+  },
+  ".cm-codeblock-actions": {
+    position: "absolute",
+    top: "8px",
+    right: "8px",
+    display: "flex",
+    gap: "6px",
+    zIndex: "1",
+  },
+  ".cm-codeblock-widget code": {
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  ".cm-codeblock-line": {
+    display: "block",
+    padding: "0 16px",
+    lineHeight: "1.7",
+    minHeight: "26px",
+  },
+  ".cm-codeblock-fence": {
+    color: "hsl(var(--muted-foreground) / 0.6)",
+  },
+  ".cm-codeblock-source-toggle": {
+    display: "flex",
+    justifyContent: "flex-end",
+    marginBottom: "6px",
+  },
+  ".cm-codeblock-toggle, .cm-codeblock-copy": {
+    border: "1px solid hsl(var(--border))",
+    backgroundColor: "hsl(var(--background))",
+    color: "hsl(var(--foreground))",
+    borderRadius: "6px",
+    padding: "4px 8px",
+    fontSize: "12px",
+    lineHeight: "1",
+    cursor: "pointer",
+  },
+  ".cm-codeblock-copy-success": {
+    color: "hsl(142 76% 36%)",
+  },
+  ".cm-codeblock-source": {
+    backgroundColor: "rgba(139, 92, 246, 0.1)",
+  },
+
   // 基础 Markdown 样式
   ".cm-header-1": { fontSize: "2em", fontWeight: "700", lineHeight: "1.3", color: "hsl(var(--md-heading, var(--foreground)))" },
   ".cm-header-2": { fontSize: "1.5em", fontWeight: "600", lineHeight: "1.4", color: "hsl(var(--md-heading, var(--foreground)))" },
@@ -352,34 +400,6 @@ class MathWidget extends WidgetType {
   }
 }
 
-class CodeBlockWidget extends WidgetType {
-  constructor(readonly code: string, readonly language: string) { super(); }
-  eq(other: CodeBlockWidget) { return other.code === this.code && other.language === this.language; }
-  toDOM() {
-    const c = document.createElement("div");
-    c.className = "cm-code-block-widget relative group";
-    c.dataset.widgetType = "codeblock";
-    c.innerHTML = `<pre class="p-3 m-0 overflow-auto"><code class="hljs font-mono ${this.language ? 'language-' + this.language : ''}"></code></pre>`;
-    const codeEl = c.querySelector("code")!;
-    if (this.language && lowlight.registered(this.language)) {
-      try { const tree = lowlight.highlight(this.language, this.code); this.hastToDOM(tree.children, codeEl); } catch { }
-    } else codeEl.textContent = this.code;
-    return c;
-  }
-  hastToDOM(nodes: any[], parent: HTMLElement) {
-    for (const node of nodes) {
-      if (node.type === 'text') parent.appendChild(document.createTextNode(node.value));
-      else if (node.type === 'element') {
-        const el = document.createElement(node.tagName);
-        if (node.properties?.className) el.className = node.properties.className.join(' ');
-        if (node.children) this.hastToDOM(node.children, el);
-        parent.appendChild(el);
-      }
-    }
-  }
-  ignoreEvent() { return false; }
-}
-
 // Mermaid 图表 Widget
 class MermaidWidget extends WidgetType {
   constructor(readonly code: string) { super(); }
@@ -387,6 +407,7 @@ class MermaidWidget extends WidgetType {
   toDOM() {
     const container = document.createElement("div");
     container.className = "mermaid-container my-2";
+    container.dataset.widgetType = "codeblock";
 
     const pre = document.createElement("pre");
     pre.className = "mermaid";
@@ -698,24 +719,24 @@ function buildMathDecorations(state: EditorState): DecorationSet {
   return Decoration.set(decorations.sort((a, b) => a.from - b.from), true);
 }
 
-// 代码块位置缓存
-let codeBlockPositionsCache: { from: number, to: number }[] = [];
+// Mermaid 代码块位置缓存（常规代码块改用 codemirror-live-markdown）
+let mermaidBlockPositionsCache: { from: number, to: number }[] = [];
 
-const codeBlockStateField = StateField.define<DecorationSet>({
-  create: buildCodeBlockDecorations,
+const mermaidStateField = StateField.define<DecorationSet>({
+  create: buildMermaidDecorations,
   update(deco, tr) {
-    if (tr.docChanged || tr.reconfigured) return buildCodeBlockDecorations(tr.state);
+    if (tr.docChanged || tr.reconfigured) return buildMermaidDecorations(tr.state);
     const isDragging = tr.state.field(mouseSelectingField, false);
     const wasDragging = tr.startState.field(mouseSelectingField, false);
-    if (wasDragging && !isDragging) return buildCodeBlockDecorations(tr.state);
+    if (wasDragging && !isDragging) return buildMermaidDecorations(tr.state);
     if (isDragging) return deco;
     if (tr.selection) {
       const oldSel = tr.startState.selection.main;
       const newSel = tr.state.selection.main;
       const touches = (sel: { from: number, to: number }) =>
-        codeBlockPositionsCache.some(c => (sel.from >= c.from && sel.from <= c.to) || (sel.to >= c.from && sel.to <= c.to) || (sel.from <= c.from && sel.to >= c.to));
+        mermaidBlockPositionsCache.some(c => (sel.from >= c.from && sel.from <= c.to) || (sel.to >= c.from && sel.to <= c.to) || (sel.from <= c.from && sel.to >= c.to));
       if (touches(oldSel) !== touches(newSel) || (touches(newSel) && (oldSel.from !== newSel.from || oldSel.to !== newSel.to))) {
-        return buildCodeBlockDecorations(tr.state);
+        return buildMermaidDecorations(tr.state);
       }
     }
     return deco;
@@ -723,7 +744,7 @@ const codeBlockStateField = StateField.define<DecorationSet>({
   provide: f => EditorView.decorations.from(f),
 });
 
-function shouldShowCodeBlockSource(state: EditorState, from: number, to: number): boolean {
+function shouldShowMermaidSource(state: EditorState, from: number, to: number): boolean {
   const shouldCollapse = state.facet(collapseOnSelectionFacet);
   if (!shouldCollapse) return false;
   const isDragging = state.field(mouseSelectingField, false);
@@ -740,22 +761,23 @@ function shouldShowCodeBlockSource(state: EditorState, from: number, to: number)
   });
 }
 
-function buildCodeBlockDecorations(state: EditorState): DecorationSet {
+function buildMermaidDecorations(state: EditorState): DecorationSet {
   const decorations: any[] = [];
-  codeBlockPositionsCache = [];
+  mermaidBlockPositionsCache = [];
   syntaxTree(state).iterate({
     enter: (node) => {
       if (node.name === "FencedCode") {
-        codeBlockPositionsCache.push({ from: node.from, to: node.to });
-        if (shouldShowCodeBlockSource(state, node.from, node.to)) return;
         const text = state.doc.sliceString(node.from, node.to);
         const lines = text.split('\n');
         if (lines.length < 2) return;
         const lang = lines[0].replace(/^\s*`{3,}/, "").trim().toLowerCase();
+        if (lang !== "mermaid") return;
+
+        mermaidBlockPositionsCache.push({ from: node.from, to: node.to });
+        if (shouldShowMermaidSource(state, node.from, node.to)) return;
+
         const code = lines.slice(1, lines.length - 1).join('\n');
-        const widget = lang === 'mermaid'
-          ? new MermaidWidget(code)
-          : new CodeBlockWidget(code, lang);
+        const widget = new MermaidWidget(code);
         decorations.push(Decoration.replace({ widget, block: true }).range(node.from, node.to));
       }
     }
@@ -1377,13 +1399,25 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
 
     const getModeExtensions = useCallback((mode: ViewMode) => {
       const imageField = vaultPath ? createImageStateField(vaultPath) : null;
-      const widgets = [mathStateField, codeBlockStateField, calloutStateField, highlightStateField, horizontalRuleStateField];
+      const widgets = [mathStateField, mermaidStateField, calloutStateField, highlightStateField, horizontalRuleStateField];
       if (imageField) widgets.push(imageField);
       switch (mode) {
         case 'reading':
-          return [collapseOnSelectionFacet.of(false), readingModePlugin, tableField, ...widgets];
+          return [
+            collapseOnSelectionFacet.of(false),
+            readingModePlugin,
+            tableField,
+            codeBlockField({ copyButton: true }),
+            ...widgets,
+          ];
         case 'live':
-          return [collapseOnSelectionFacet.of(true), livePreviewPlugin, tableEditorPlugin(), ...widgets];
+          return [
+            collapseOnSelectionFacet.of(true),
+            livePreviewPlugin,
+            tableEditorPlugin(),
+            codeBlockEditorPlugin({ copyButton: true }),
+            ...widgets,
+          ];
         case 'source':
         default:
           return [calloutStateField];
