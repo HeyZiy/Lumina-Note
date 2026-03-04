@@ -300,6 +300,11 @@ const createEditorTheme = (fontSize: number) => EditorView.theme({
     padding: "0 16px !important",
     lineHeight: "1.7 !important",
   },
+  // Re-enable native ::selection for code blocks since drawSelection's
+  // selectionLayer (z-index:-1) is hidden behind the opaque background.
+  ".cm-codeblock-content::selection, .cm-codeblock-content ::selection": {
+    backgroundColor: "rgba(191, 219, 254, 0.35) !important",
+  },
   ".cm-codeblock-footer": {
     backgroundColor: "hsl(var(--muted))",
     borderRadius: "0 0 6px 6px",
