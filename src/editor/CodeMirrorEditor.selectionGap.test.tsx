@@ -86,6 +86,65 @@ describe('CodeMirror live selection gap bridge', () => {
     expect(view.state.selection.main.to).toBe(view.state.doc.length);
   });
 
+  it('does not upgrade viewport-covering selection to full document without select-all intent', () => {
+    const content = Array.from({ length: 120 }, (_, i) => `Line ${i + 1} - sample text`).join('\n');
+    const { container, view } = setupEditor(content);
+    const contentDom = container.querySelector('.cm-content');
+    if (!contentDom) {
+      throw new Error('CodeMirror content DOM not found');
+    }
+
+    const lines = Array.from(contentDom.querySelectorAll('.cm-line'));
+    let targetNode: Text | null = null;
+    let targetOffset = 0;
+    for (const line of lines) {
+      const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      const textNode = walker.nextNode() as Text | null;
+      if (!textNode) continue;
+      let pos = -1;
+      try {
+        pos = view.posAtDOM(textNode, textNode.textContent?.length ?? 0);
+      } catch {
+        continue;
+      }
+      if (pos >= view.viewport.to && pos < view.state.doc.length) {
+        targetNode = textNode;
+        targetOffset = textNode.textContent?.length ?? 0;
+        break;
+      }
+    }
+
+    if (!targetNode) {
+      throw new Error('Failed to find a DOM range that covers viewport without full document');
+    }
+
+    const firstLine = lines[0];
+    const firstWalker = document.createTreeWalker(firstLine, NodeFilter.SHOW_TEXT);
+    const firstTextNode = firstWalker.nextNode() as Text | null;
+    if (!firstTextNode) {
+      throw new Error('First line text node not found');
+    }
+
+    const selection = document.getSelection();
+    if (!selection) {
+      throw new Error('Document selection is not available');
+    }
+
+    const range = document.createRange();
+    range.setStart(firstTextNode, 0);
+    range.setEnd(targetNode, targetOffset);
+
+    act(() => {
+      view.focus();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange'));
+    });
+
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBeLessThan(view.state.doc.length);
+  });
+
   it('enables drawSelection layer for select-all', () => {
     const { container, view } = setupEditor('Line 1\nLine 2\nLine 3');
     act(() => {
