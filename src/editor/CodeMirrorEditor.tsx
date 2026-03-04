@@ -2489,7 +2489,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
               collapseOnSelectionFacet.of(true),
               livePreviewPlugin,
               tableEditorPlugin(),
-              codeBlockField({ interaction: 'inline', copyButton: true }),
+              // codemirror-live-markdown currently supports only "auto" | "toggle".
+              codeBlockField({ interaction: 'auto', copyButton: true }),
               ...widgets,
             ];
           case 'source':
