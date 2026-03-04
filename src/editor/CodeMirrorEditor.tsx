@@ -1138,7 +1138,7 @@ const selectionStatePlugin = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       const isDragging = update.state.field(mouseSelectingField, false);
       const wasDragging = update.startState.field(mouseSelectingField, false);
-      if (wasDragging && !isDragging) {
+      if (isDragging !== wasDragging) {
         this.updateClass(update.view);
         return;
       }
