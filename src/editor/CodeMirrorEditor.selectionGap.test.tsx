@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
+import { mouseSelectingField } from 'codemirror-live-markdown';
 import { CodeMirrorEditor } from './CodeMirrorEditor';
 
 function setupEditor(content: string) {
@@ -52,6 +53,47 @@ describe('CodeMirror live selection gap bridge', () => {
     });
     expect(container.querySelector('.cm-selection-gap')).toBeNull();
     expect(container.querySelector('.cm-selection-bridge')).toBeNull();
+  });
+
+  it('does not mark single click as drag selection', () => {
+    const { view } = setupEditor('Line 1\nLine 2');
+    const ownerDoc = view.dom.ownerDocument as Document & {
+      elementFromPoint?: (x: number, y: number) => Element | null;
+    };
+    const root = view.root as Document | ShadowRoot;
+    const rootWithPoint = root as Document & {
+      elementFromPoint?: (x: number, y: number) => Element | null;
+    };
+    const prevDocElementFromPoint = ownerDoc.elementFromPoint;
+    const prevRootElementFromPoint = rootWithPoint.elementFromPoint;
+    const prevGetClientRects = Range.prototype.getClientRects;
+    const prevGetBoundingClientRect = Range.prototype.getBoundingClientRect;
+    ownerDoc.elementFromPoint = () => view.contentDOM;
+    rootWithPoint.elementFromPoint = () => view.contentDOM;
+    Range.prototype.getClientRects = function () {
+      return [] as unknown as DOMRectList;
+    };
+    Range.prototype.getBoundingClientRect = function () {
+      return new DOMRect(0, 0, 0, 0);
+    };
+    const down = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 20,
+      clientY: 20,
+      button: 0,
+    });
+    try {
+      act(() => {
+        view.contentDOM.dispatchEvent(down);
+      });
+      expect(view.state.field(mouseSelectingField, false)).toBe(false);
+    } finally {
+      ownerDoc.elementFromPoint = prevDocElementFromPoint;
+      rootWithPoint.elementFromPoint = prevRootElementFromPoint;
+      Range.prototype.getClientRects = prevGetClientRects;
+      Range.prototype.getBoundingClientRect = prevGetBoundingClientRect;
+    }
   });
 
   it('selects full document on beforeinput selectAll', () => {

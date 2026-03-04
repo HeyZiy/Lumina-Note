@@ -1228,6 +1228,7 @@ function shouldDisableDrawSelectionForTauriWebKit() {
 
 const CM_SELECTION_VISUAL_DEBUG_STORAGE_KEY = 'cmSelectionVisualDebug';
 const CM_SELECTION_ANOMALY_THROTTLE_MS = 180;
+const DRAG_SELECTION_THRESHOLD_PX = 4;
 
 function selectionVisualDebugEnabled() {
   if (typeof window === 'undefined') return false;
@@ -2213,14 +2214,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         }
       }
 
-      // 拖动选择检测：mousedown 时设为 true，mouseup 时设为 false
-      const handleMouseDown = () => {
-        view.dispatch({ effects: setMouseSelecting.of(true) });
-        startSelectionProbe();
-        reportSelectionVisualAnomaly('mousedown');
-      };
-      const handleMouseUp = () => {
-        // 延迟一帧确保选择已更新
+      let mouseDownActive = false;
+      let dragSelectionActive = false;
+      let mouseDownX = 0;
+      let mouseDownY = 0;
+
+      const clearDragSelectionState = () => {
+        mouseDownActive = false;
+        if (!dragSelectionActive) {
+          stopSelectionProbe();
+          return;
+        }
+        dragSelectionActive = false;
         requestAnimationFrame(() => {
           view.dispatch({ effects: setMouseSelecting.of(false) });
           reportSelectionVisualAnomaly('mouseup');
@@ -2230,8 +2235,38 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
           });
         });
       };
+
+      const handleMouseDown = (event: MouseEvent) => {
+        if (event.button !== 0) return;
+        mouseDownActive = true;
+        mouseDownX = event.clientX;
+        mouseDownY = event.clientY;
+        reportSelectionVisualAnomaly('mousedown');
+      };
+      const handleMouseMove = (event: MouseEvent) => {
+        if (!mouseDownActive || dragSelectionActive || (event.buttons & 1) === 0) return;
+        const dx = Math.abs(event.clientX - mouseDownX);
+        const dy = Math.abs(event.clientY - mouseDownY);
+        if (dx < DRAG_SELECTION_THRESHOLD_PX && dy < DRAG_SELECTION_THRESHOLD_PX) return;
+        dragSelectionActive = true;
+        view.dispatch({ effects: setMouseSelecting.of(true) });
+        startSelectionProbe();
+        reportSelectionVisualAnomaly('drag-start');
+      };
+      const handleMouseUp = () => {
+        clearDragSelectionState();
+      };
+      const handleOwnerDocVisibilityChange = () => {
+        if (ownerDoc.hidden) clearDragSelectionState();
+      };
+      const handleWindowBlur = () => {
+        clearDragSelectionState();
+      };
       view.contentDOM.addEventListener('mousedown', handleMouseDown);
-      document.addEventListener('mouseup', handleMouseUp);
+      ownerDoc.addEventListener('mousemove', handleMouseMove);
+      ownerDoc.addEventListener('mouseup', handleMouseUp);
+      ownerDoc.addEventListener('visibilitychange', handleOwnerDocVisibilityChange);
+      ownerDoc.defaultView?.addEventListener('blur', handleWindowBlur);
 
       const handleSelectAllBeforeInput = (event: InputEvent) => {
         const v = viewRef.current;
@@ -2486,7 +2521,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         view.contentDOM.removeEventListener('mousedown', handleMouseDown);
         view.contentDOM.removeEventListener('mousedown', handleClick);
         view.contentDOM.removeEventListener('paste', handlePaste);
-        document.removeEventListener('mouseup', handleMouseUp);
+        ownerDoc.removeEventListener('mousemove', handleMouseMove);
+        ownerDoc.removeEventListener('mouseup', handleMouseUp);
+        ownerDoc.removeEventListener('visibilitychange', handleOwnerDocVisibilityChange);
+        ownerDoc.defaultView?.removeEventListener('blur', handleWindowBlur);
         ownerDoc.removeEventListener('beforeinput', handleSelectAllBeforeInput, true);
         ownerDoc.removeEventListener('keydown', handleSelectAllKeyDown, true);
         ownerDoc.removeEventListener('selectionchange', handleSelectionChange);
