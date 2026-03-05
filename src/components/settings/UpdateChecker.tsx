@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Loader2, RefreshCw, Download, RotateCcw, CheckCircle2, AlertCircle, SkipForward } from "lucide-react";
 import { useLocaleStore } from "@/stores/useLocaleStore";
-import { useUpdateStore, checkForUpdate, getUpdateHandle } from "@/stores/useUpdateStore";
+import {
+    useUpdateStore,
+    checkForUpdate,
+    getUpdateHandle,
+    initResumableUpdateListeners,
+    isResumableUpdaterEnabled,
+    startResumableInstall,
+} from "@/stores/useUpdateStore";
 import { normalizeErrorMessage, reportOperationError } from "@/lib/reportError";
 import { retryWithExponentialBackoff } from "@/lib/retry";
 
@@ -87,7 +94,7 @@ export function UpdateChecker() {
         }
     };
 
-    const installUpdate = async () => {
+    const installUpdateLegacy = async () => {
         const updateHandle = getUpdateHandle();
         if (!updateHandle) return;
 
@@ -138,13 +145,37 @@ export function UpdateChecker() {
         } catch (err) {
             const message = normalizeErrorMessage(err);
             reportOperationError({
-                source: "UpdateChecker.installUpdate",
+                source: "UpdateChecker.installUpdateLegacy",
                 action: "Download and install update",
                 error: err,
                 context: { sessionId },
             });
             recordInstallError(message);
         }
+    };
+
+    const installUpdate = async () => {
+        if (isResumableUpdaterEnabled()) {
+            try {
+                await initResumableUpdateListeners();
+                const taskId = await startResumableInstall(availableUpdate?.version);
+                console.info("[Update] resumable install task started", {
+                    taskId,
+                    version: availableUpdate?.version,
+                });
+                return;
+            } catch (err) {
+                reportOperationError({
+                    source: "UpdateChecker.installUpdate",
+                    action: "Start resumable update task",
+                    error: err,
+                    level: "warning",
+                    context: { fallback: "downloadAndInstall" },
+                });
+            }
+        }
+
+        await installUpdateLegacy();
     };
 
     const handleSkipVersion = () => {
@@ -179,8 +210,10 @@ export function UpdateChecker() {
                         {status === "up-to-date" && t.updateChecker.descUpToDate}
                         {status === "idle" && hasUpdate && t.updateChecker.descAvailable.replace("{version}", availableUpdate.version)}
                         {status === "downloading" && t.updateChecker.descDownloading}
+                        {status === "verifying" && t.updateChecker.descVerifying}
                         {status === "installing" && t.updateChecker.descInstalling}
                         {status === "ready" && t.updateChecker.descReady}
+                        {status === "cancelled" && t.updateChecker.descCancelled}
                         {status === "error" && t.updateChecker.descError}
                     </p>
                 </div>
@@ -282,10 +315,16 @@ export function UpdateChecker() {
                     <p>
                         session #{installTelemetry.sessionId} · phase {installTelemetry.phase} · attempt {installTelemetry.attempt}
                     </p>
+                    {installTelemetry.taskId && <p>task: {installTelemetry.taskId}</p>}
                     {installTelemetry.startedAt && <p>started: {new Date(installTelemetry.startedAt).toLocaleString()}</p>}
                     {installTelemetry.updatedAt && <p>last event: {new Date(installTelemetry.updatedAt).toLocaleString()}</p>}
                     {installTelemetry.finishedAt && <p>finished: {new Date(installTelemetry.finishedAt).toLocaleString()}</p>}
                     {downloadedSize && <p>bytes: {downloadedSize}</p>}
+                    <p>resumable: {installTelemetry.resumable ? "yes" : "no"}</p>
+                    <p>server range: {installTelemetry.capability}</p>
+                    {installTelemetry.retryDelayMs !== null && <p>retry delay: {installTelemetry.retryDelayMs} ms</p>}
+                    {installTelemetry.lastHttpStatus !== null && <p>http status: {installTelemetry.lastHttpStatus}</p>}
+                    {installTelemetry.errorCode && <p>error code: {installTelemetry.errorCode}</p>}
                 </div>
             )}
 

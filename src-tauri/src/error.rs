@@ -26,6 +26,21 @@ pub enum AppError {
 
     #[error("Network error: {0}")]
     Network(String),
+
+    #[error("Update error: {0}")]
+    Update(String),
+
+    #[error("Update network error: {0}")]
+    UpdateNetwork(String),
+
+    #[error("Update integrity error: {0}")]
+    UpdateIntegrity(String),
+
+    #[error("Update install error: {0}")]
+    UpdateInstall(String),
+
+    #[error("Update state error: {0}")]
+    UpdateState(String),
 }
 
 impl From<reqwest::Error> for AppError {

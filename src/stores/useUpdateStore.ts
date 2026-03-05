@@ -1,11 +1,13 @@
 /**
  * 更新管理 Store
- * 负责自动检查更新、记录检查时间、管理跳过版本等
+ * 负责自动检查更新、记录检查时间、管理跳过版本以及可恢复下载遥测
  */
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { check, Update } from "@tauri-apps/plugin-updater";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { reportOperationError } from "@/lib/reportError";
 import { retryWithExponentialBackoff } from "@/lib/retry";
 
@@ -14,16 +16,60 @@ const UPDATE_CHECK_MAX_ATTEMPTS = 3;
 const UPDATE_CHECK_BASE_DELAY_MS = 1_000;
 const UPDATE_CHECK_MAX_DELAY_MS = 8_000;
 
+const RESUMABLE_EVENT_NAME = "update:resumable-event";
+
+type UpdateResumableEventType =
+  | "started"
+  | "resumed"
+  | "progress"
+  | "retrying"
+  | "verifying"
+  | "installing"
+  | "ready"
+  | "error"
+  | "cancelled";
+
+export type UpdateInstallPhase =
+  | "idle"
+  | "downloading"
+  | "verifying"
+  | "installing"
+  | "ready"
+  | "error"
+  | "cancelled";
+
+export type UpdateDownloadCapability = "unknown" | "supported" | "unsupported";
+
 export interface UpdateInfo {
   version: string;
   body: string | null;
   date: string | null;
 }
 
-export type UpdateInstallPhase = "idle" | "downloading" | "installing" | "ready" | "error";
+export interface ResumableUpdateStatus {
+  taskId: string;
+  version: string;
+  attempt: number;
+  downloadedBytes: number;
+  totalBytes?: number | null;
+  resumable: boolean;
+  stage: string;
+  status?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  timestamp: number;
+  retryDelayMs?: number | null;
+  lastHttpStatus?: number | null;
+  canResumeAfterRestart?: boolean;
+}
+
+export interface ResumableUpdateEvent extends ResumableUpdateStatus {
+  type: UpdateResumableEventType;
+}
 
 export interface UpdateInstallTelemetry {
   sessionId: number;
+  taskId: string | null;
   phase: UpdateInstallPhase;
   attempt: number;
   progress: number;
@@ -33,10 +79,17 @@ export interface UpdateInstallTelemetry {
   updatedAt: number | null;
   finishedAt: number | null;
   error: string | null;
+  errorCode: string | null;
+  resumable: boolean;
+  retryDelayMs: number | null;
+  lastHttpStatus: number | null;
+  canResumeAfterRestart: boolean;
+  capability: UpdateDownloadCapability;
 }
 
 const createInitialInstallTelemetry = (): UpdateInstallTelemetry => ({
   sessionId: 0,
+  taskId: null,
   phase: "idle",
   attempt: 0,
   progress: 0,
@@ -46,6 +99,12 @@ const createInitialInstallTelemetry = (): UpdateInstallTelemetry => ({
   updatedAt: null,
   finishedAt: null,
   error: null,
+  errorCode: null,
+  resumable: false,
+  retryDelayMs: null,
+  lastHttpStatus: null,
+  canResumeAfterRestart: false,
+  capability: "unknown",
 });
 
 interface UpdateState {
@@ -53,13 +112,13 @@ interface UpdateState {
   lastCheckTime: number;
   skippedVersions: string[];
   checkCooldownHours: number;
+  installTelemetry: UpdateInstallTelemetry;
 
   // 运行时状态
   availableUpdate: UpdateInfo | null;
   updateHandle: Update | null;
   hasUnreadUpdate: boolean;
   isChecking: boolean;
-  installTelemetry: UpdateInstallTelemetry;
 
   // Actions
   setLastCheckTime: (time: number) => void;
@@ -78,9 +137,80 @@ interface UpdateState {
   recordInstallInstalling: () => void;
   recordInstallRetry: (nextAttempt: number) => void;
   recordInstallReady: () => void;
-  recordInstallError: (message: string) => void;
+  recordInstallError: (message: string, errorCode?: string | null) => void;
+  applyResumableEvent: (event: ResumableUpdateEvent) => void;
+  hydrateResumableStatus: (status: ResumableUpdateStatus | null) => void;
   resetInstallTelemetry: () => void;
 }
+
+const clampAttempt = (attempt: number | undefined): number => {
+  if (!Number.isFinite(attempt)) return 1;
+  return Math.max(1, Math.floor(attempt || 1));
+};
+
+const mapStageToPhase = (stage: string | undefined): UpdateInstallPhase => {
+  switch ((stage || "").toLowerCase()) {
+    case "downloading":
+      return "downloading";
+    case "verifying":
+      return "verifying";
+    case "installing":
+      return "installing";
+    case "ready":
+      return "ready";
+    case "cancelled":
+      return "cancelled";
+    case "error":
+      return "error";
+    default:
+      return "downloading";
+  }
+};
+
+const buildTelemetryFromResumable = (
+  prev: UpdateInstallTelemetry,
+  payload: ResumableUpdateStatus,
+): UpdateInstallTelemetry => {
+  const totalBytes =
+    Number.isFinite(payload.totalBytes) && (payload.totalBytes || 0) > 0
+      ? Number(payload.totalBytes)
+      : prev.contentLength;
+  const downloadedBytes = Math.max(
+    0,
+    Number.isFinite(payload.downloadedBytes) ? Number(payload.downloadedBytes) : prev.downloadedBytes,
+  );
+  const progress =
+    totalBytes > 0 ? Math.min(100, (downloadedBytes / totalBytes) * 100) : prev.progress;
+  const phase = mapStageToPhase(payload.stage || payload.status);
+  const now = Number.isFinite(payload.timestamp) ? Number(payload.timestamp) : Date.now();
+  const finishedAt = phase === "ready" || phase === "error" || phase === "cancelled" ? now : null;
+
+  return {
+    ...prev,
+    taskId: payload.taskId || prev.taskId,
+    phase,
+    attempt: clampAttempt(payload.attempt),
+    progress,
+    downloadedBytes,
+    contentLength: totalBytes,
+    startedAt: prev.startedAt ?? now,
+    updatedAt: now,
+    finishedAt,
+    error: payload.errorMessage ?? (phase === "error" ? prev.error : null),
+    errorCode: payload.errorCode ?? (phase === "error" ? prev.errorCode : null),
+    resumable: Boolean(payload.resumable),
+    retryDelayMs:
+      Number.isFinite(payload.retryDelayMs) && payload.retryDelayMs !== null
+        ? Number(payload.retryDelayMs)
+        : null,
+    lastHttpStatus:
+      Number.isFinite(payload.lastHttpStatus) && payload.lastHttpStatus !== null
+        ? Number(payload.lastHttpStatus)
+        : null,
+    canResumeAfterRestart: payload.canResumeAfterRestart !== false,
+    capability: payload.resumable ? "supported" : "unsupported",
+  };
+};
 
 export const useUpdateStore = create<UpdateState>()(
   persist(
@@ -89,13 +219,13 @@ export const useUpdateStore = create<UpdateState>()(
       lastCheckTime: 0,
       skippedVersions: [],
       checkCooldownHours: 24,
+      installTelemetry: createInitialInstallTelemetry(),
 
       // 运行时状态（不持久化）
       availableUpdate: null,
       updateHandle: null,
       hasUnreadUpdate: false,
       isChecking: false,
-      installTelemetry: createInitialInstallTelemetry(),
 
       setLastCheckTime: (time) => set({ lastCheckTime: time }),
 
@@ -143,16 +273,12 @@ export const useUpdateStore = create<UpdateState>()(
         const now = Date.now();
         set({
           installTelemetry: {
+            ...createInitialInstallTelemetry(),
             sessionId: nextSessionId,
             phase: "downloading",
             attempt: 1,
-            progress: 0,
-            downloadedBytes: 0,
-            contentLength: 0,
             startedAt: now,
             updatedAt: now,
-            finishedAt: null,
-            error: null,
           },
         });
         return nextSessionId;
@@ -163,9 +289,13 @@ export const useUpdateStore = create<UpdateState>()(
           installTelemetry: {
             ...state.installTelemetry,
             phase: "downloading",
-            contentLength: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : state.installTelemetry.contentLength,
+            contentLength:
+              Number.isFinite(contentLength) && contentLength > 0
+                ? contentLength
+                : state.installTelemetry.contentLength,
             updatedAt: Date.now(),
             error: null,
+            errorCode: null,
           },
         })),
 
@@ -175,7 +305,9 @@ export const useUpdateStore = create<UpdateState>()(
           const downloadedBytes = state.installTelemetry.downloadedBytes + delta;
           const contentLength = state.installTelemetry.contentLength;
           const progress =
-            contentLength > 0 ? Math.min(100, (downloadedBytes / contentLength) * 100) : state.installTelemetry.progress;
+            contentLength > 0
+              ? Math.min(100, (downloadedBytes / contentLength) * 100)
+              : state.installTelemetry.progress;
           return {
             installTelemetry: {
               ...state.installTelemetry,
@@ -184,6 +316,7 @@ export const useUpdateStore = create<UpdateState>()(
               progress,
               updatedAt: Date.now(),
               error: null,
+              errorCode: null,
             },
           };
         }),
@@ -195,6 +328,7 @@ export const useUpdateStore = create<UpdateState>()(
             phase: "installing",
             updatedAt: Date.now(),
             error: null,
+            errorCode: null,
           },
         })),
 
@@ -209,6 +343,7 @@ export const useUpdateStore = create<UpdateState>()(
             contentLength: 0,
             updatedAt: Date.now(),
             error: null,
+            errorCode: null,
           },
         })),
 
@@ -223,11 +358,12 @@ export const useUpdateStore = create<UpdateState>()(
               updatedAt: now,
               finishedAt: now,
               error: null,
+              errorCode: null,
             },
           };
         }),
 
-      recordInstallError: (message) =>
+      recordInstallError: (message, errorCode = undefined) =>
         set((state) => {
           const now = Date.now();
           return {
@@ -237,9 +373,22 @@ export const useUpdateStore = create<UpdateState>()(
               updatedAt: now,
               finishedAt: now,
               error: message,
+              errorCode: errorCode ?? null,
             },
           };
         }),
+
+      applyResumableEvent: (event) =>
+        set((state) => ({
+          installTelemetry: buildTelemetryFromResumable(state.installTelemetry, event),
+        })),
+
+      hydrateResumableStatus: (status) =>
+        set((state) => ({
+          installTelemetry: status
+            ? buildTelemetryFromResumable(state.installTelemetry, status)
+            : state.installTelemetry,
+        })),
 
       resetInstallTelemetry: () =>
         set((state) => ({
@@ -255,10 +404,144 @@ export const useUpdateStore = create<UpdateState>()(
         lastCheckTime: state.lastCheckTime,
         skippedVersions: state.skippedVersions,
         checkCooldownHours: state.checkCooldownHours,
+        installTelemetry: state.installTelemetry,
       }),
-    }
-  )
+    },
+  ),
 );
+
+let resumableUnlistenFn: UnlistenFn | null = null;
+let resumableInitPromise: Promise<void> | null = null;
+
+const parseResumableEvent = (payload: unknown): ResumableUpdateEvent | null => {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as Record<string, unknown>;
+  const type = data.type;
+  const taskId = data.taskId;
+  const version = data.version;
+  if (typeof type !== "string" || typeof taskId !== "string" || typeof version !== "string") {
+    return null;
+  }
+  const timestamp =
+    typeof data.timestamp === "number" && Number.isFinite(data.timestamp)
+      ? data.timestamp
+      : Date.now();
+  return {
+    type: type as UpdateResumableEventType,
+    taskId,
+    version,
+    attempt: typeof data.attempt === "number" ? data.attempt : 1,
+    downloadedBytes: typeof data.downloadedBytes === "number" ? data.downloadedBytes : 0,
+    totalBytes: typeof data.totalBytes === "number" ? data.totalBytes : null,
+    resumable: Boolean(data.resumable),
+    stage: typeof data.stage === "string" ? data.stage : "downloading",
+    status: typeof data.status === "string" ? data.status : undefined,
+    errorCode: typeof data.errorCode === "string" ? data.errorCode : null,
+    errorMessage: typeof data.errorMessage === "string" ? data.errorMessage : null,
+    timestamp,
+    retryDelayMs: typeof data.retryDelayMs === "number" ? data.retryDelayMs : null,
+    lastHttpStatus: typeof data.lastHttpStatus === "number" ? data.lastHttpStatus : null,
+    canResumeAfterRestart:
+      typeof data.canResumeAfterRestart === "boolean" ? data.canResumeAfterRestart : true,
+  };
+};
+
+const normalizeResumableStatus = (payload: unknown): ResumableUpdateStatus | null => {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as Record<string, unknown>;
+  const taskId = data.taskId;
+  const version = data.version;
+  if (typeof taskId !== "string" || typeof version !== "string") {
+    return null;
+  }
+  return {
+    taskId,
+    version,
+    attempt: typeof data.attempt === "number" ? data.attempt : 1,
+    downloadedBytes: typeof data.downloadedBytes === "number" ? data.downloadedBytes : 0,
+    totalBytes: typeof data.totalBytes === "number" ? data.totalBytes : null,
+    resumable: Boolean(data.resumable),
+    stage: typeof data.stage === "string" ? data.stage : "downloading",
+    status: typeof data.status === "string" ? data.status : undefined,
+    errorCode: typeof data.errorCode === "string" ? data.errorCode : null,
+    errorMessage: typeof data.errorMessage === "string" ? data.errorMessage : null,
+    timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+    retryDelayMs: typeof data.retryDelayMs === "number" ? data.retryDelayMs : null,
+    lastHttpStatus: typeof data.lastHttpStatus === "number" ? data.lastHttpStatus : null,
+    canResumeAfterRestart:
+      typeof data.canResumeAfterRestart === "boolean" ? data.canResumeAfterRestart : true,
+  };
+};
+
+export const isResumableUpdaterEnabled = (): boolean => {
+  const fromEnv = (import.meta.env.VITE_RESUMABLE_UPDATER_ENABLED || "").toString().trim();
+  if (fromEnv === "0" || fromEnv.toLowerCase() === "false") {
+    return false;
+  }
+  return true;
+};
+
+export async function initResumableUpdateListeners(): Promise<void> {
+  if (!isResumableUpdaterEnabled()) return;
+  if (resumableInitPromise) return resumableInitPromise;
+
+  resumableInitPromise = (async () => {
+    if (resumableUnlistenFn) {
+      resumableUnlistenFn();
+      resumableUnlistenFn = null;
+    }
+
+    resumableUnlistenFn = await listen(RESUMABLE_EVENT_NAME, (event) => {
+      const payload = parseResumableEvent(event.payload);
+      if (!payload) return;
+      useUpdateStore.getState().applyResumableEvent(payload);
+    });
+
+    try {
+      const status = await invoke<unknown>("update_get_resumable_status");
+      useUpdateStore.getState().hydrateResumableStatus(normalizeResumableStatus(status));
+    } catch (error) {
+      reportOperationError({
+        source: "useUpdateStore.initResumableUpdateListeners",
+        action: "Sync resumable updater status",
+        error,
+        level: "warning",
+      });
+    }
+  })().finally(() => {
+    resumableInitPromise = null;
+  });
+
+  return resumableInitPromise;
+}
+
+export function cleanupResumableUpdateListeners(): void {
+  if (resumableUnlistenFn) {
+    resumableUnlistenFn();
+    resumableUnlistenFn = null;
+  }
+}
+
+export async function startResumableInstall(expectedVersion?: string): Promise<string> {
+  const taskId = await invoke<string>("update_start_resumable_install", { expectedVersion });
+  if (!taskId || typeof taskId !== "string") {
+    throw new Error("Invalid resumable update task id");
+  }
+  return taskId;
+}
+
+export async function cancelResumableInstall(taskId?: string): Promise<void> {
+  await invoke("update_cancel_resumable_install", { taskId });
+}
+
+export async function clearResumableUpdateCache(version?: string): Promise<void> {
+  await invoke("update_clear_resumable_cache", { version });
+}
+
+export async function getResumableStatus(taskId?: string): Promise<ResumableUpdateStatus | null> {
+  const payload = await invoke<unknown>("update_get_resumable_status", { taskId });
+  return normalizeResumableStatus(payload);
+}
 
 /**
  * 检查是否应该执行更新检查
@@ -306,7 +589,7 @@ export async function checkForUpdate(force = false): Promise<boolean> {
             error,
           });
         },
-      }
+      },
     );
     store.setLastCheckTime(Date.now());
 
@@ -327,10 +610,10 @@ export async function checkForUpdate(force = false): Promise<boolean> {
 
       store.setAvailableUpdate(updateInfo, updateResult);
       return true;
-    } else {
-      store.setAvailableUpdate(null);
-      return false;
     }
+
+    store.setAvailableUpdate(null);
+    return false;
   } catch (err) {
     reportOperationError({
       source: "useUpdateStore.checkForUpdate",
@@ -354,14 +637,14 @@ export function initAutoUpdateCheck(delayMs = 5000): void {
     if (hasUpdate) {
       console.log(
         "[Update] New version available:",
-        useUpdateStore.getState().availableUpdate?.version
+        useUpdateStore.getState().availableUpdate?.version,
       );
     }
   }, delayMs);
 }
 
 /**
- * 获取 Update handle 用于下载安装
+ * 获取 Update handle 用于旧链路下载安装（作为降级兜底）
  */
 export function getUpdateHandle(): Update | null {
   return useUpdateStore.getState().updateHandle;

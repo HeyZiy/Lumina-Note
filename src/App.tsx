@@ -53,7 +53,7 @@ import { PluginContextMenuHost } from "@/components/plugins/PluginContextMenuHos
 import { PluginShellSlotHost } from "@/components/plugins/PluginShellSlotHost";
 import { ErrorNotifications } from "@/components/layout/ErrorNotifications";
 import { reportOperationError, reportUnhandledError } from "@/lib/reportError";
-import { initAutoUpdateCheck } from "@/stores/useUpdateStore";
+import { initAutoUpdateCheck, initResumableUpdateListeners } from "@/stores/useUpdateStore";
 
 // Debug logging is enabled via a runtime toggle (or always in dev).
 
@@ -268,6 +268,7 @@ function App() {
   // 启动时自动检查更新（延迟 5 秒，避免影响启动性能）
   useEffect(() => {
     initAutoUpdateCheck(5000);
+    void initResumableUpdateListeners();
   }, []);
 
   // 启动时自动加载保存的工作空间

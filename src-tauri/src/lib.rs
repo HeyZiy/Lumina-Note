@@ -12,6 +12,7 @@ pub mod mcp;
 pub mod mobile_gateway;
 mod node_runtime;
 mod typesetting;
+mod update_manager;
 mod vector_db;
 
 pub use commands::*;
