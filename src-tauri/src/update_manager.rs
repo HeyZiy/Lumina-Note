@@ -264,10 +264,7 @@ pub async fn update_cancel_resumable_install(
             .map(|status| status.stage);
         if let Some(stage) = current_stage {
             if !can_cancel_from_stage(stage) {
-                return Err(AppError::Update(format!(
-                    "cannot cancel update in {} stage",
-                    stage_label(stage)
-                )));
+                return Err(cancel_not_allowed_error(stage));
             }
             runtime.cancelled_tasks.insert(target_task_id.clone());
             let status = runtime
@@ -1018,6 +1015,13 @@ fn stage_label(stage: UpdateStage) -> &'static str {
     }
 }
 
+fn cancel_not_allowed_error(stage: UpdateStage) -> AppError {
+    AppError::Update(format!(
+        "UPDATE_CANCEL_NOT_ALLOWED: stage={}",
+        stage_label(stage)
+    ))
+}
+
 fn updater_pubkey() -> Result<String, AppError> {
     let config_json: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
         .map_err(|err| {
@@ -1168,6 +1172,20 @@ mod tests {
         assert!(
             message.contains("cancelled"),
             "expected cancellation in error message, got: {message}"
+        );
+    }
+
+    #[test]
+    fn cancel_not_allowed_error_contains_machine_code_and_stage() {
+        let err = cancel_not_allowed_error(UpdateStage::Installing);
+        let message = err.to_string();
+        assert!(
+            message.contains("UPDATE_CANCEL_NOT_ALLOWED"),
+            "expected machine code in error message, got: {message}"
+        );
+        assert!(
+            message.contains("stage=installing"),
+            "expected stage in error message, got: {message}"
         );
     }
 }
