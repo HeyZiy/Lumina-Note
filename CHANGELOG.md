@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-03-05
+
+### 新功能
+- 更新器新增可恢复下载与断点续传能力，支持安装过程遥测与状态恢复
+
+### 修复
+- 修复“取消更新后仍可能继续安装”的竞态问题，安装前会再次校验取消状态
+
+### 改进
+- 不可取消阶段返回机器可读错误码（`UPDATE_CANCEL_NOT_ALLOWED`），便于前端精确提示
+
 ## [0.5.24] - 2026-03-05
 
 ### 修复
