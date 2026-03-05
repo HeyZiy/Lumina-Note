@@ -1,6 +1,6 @@
 [package]
 name = "lumina-note"
-version = "0.5.23"
+version = "0.5.24"
 description = "A local-first AI-powered note-taking app"
 authors = ["Lumina Note Contributors"]
 edition = "2021"

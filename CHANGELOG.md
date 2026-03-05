@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.24] - 2026-03-05
+
+### 修复
+- 编辑器拖拽选区抖动优化，减少拖拽过程中的装饰重建与动画干扰
+- 桌面端（Tauri WebKit）规避异常选区渲染导致的整屏蓝色选区问题
+
 ## [0.5.23] - 2026-03-03
 
 ### 改进
