@@ -258,14 +258,30 @@ pub async fn update_cancel_resumable_install(
         let target_task_id = task_id
             .or_else(|| runtime.active_task_id.clone())
             .ok_or_else(|| AppError::Update("no active update task".to_string()))?;
-        runtime.cancelled_tasks.insert(target_task_id.clone());
-        if let Some(status) = runtime.statuses.get_mut(&target_task_id) {
+        let current_stage = runtime
+            .statuses
+            .get(&target_task_id)
+            .map(|status| status.stage);
+        if let Some(stage) = current_stage {
+            if !can_cancel_from_stage(stage) {
+                return Err(AppError::Update(format!(
+                    "cannot cancel update in {} stage",
+                    stage_label(stage)
+                )));
+            }
+            runtime.cancelled_tasks.insert(target_task_id.clone());
+            let status = runtime
+                .statuses
+                .get_mut(&target_task_id)
+                .ok_or_else(|| AppError::Update("update status disappeared".to_string()))?;
             status.stage = UpdateStage::Cancelled;
             status.status = UpdateStage::Cancelled;
             status.error_code = Some("cancelled".to_string());
             status.error_message = Some("Update cancelled by user".to_string());
             status.timestamp = now_millis();
             status_to_emit = Some(status.clone());
+        } else {
+            runtime.cancelled_tasks.insert(target_task_id.clone());
         }
         if runtime.active_task_id.as_deref() == Some(target_task_id.as_str()) {
             runtime.active_task_id = None;
@@ -370,6 +386,8 @@ async fn run_update_task(
     let package_bytes =
         download_with_retries(&app, runtime_state.clone(), &version_dir, &mut persisted).await?;
 
+    ensure_task_not_cancelled(runtime_state.clone(), &persisted.status.task_id).await?;
+
     persisted.status.stage = UpdateStage::Verifying;
     persisted.status.status = UpdateStage::Verifying;
     persisted.status.timestamp = now_millis();
@@ -394,6 +412,8 @@ async fn run_update_task(
     let pub_key = updater_pubkey()?;
     verify_signature(&package_bytes, &persisted.signature, &pub_key)?;
 
+    ensure_task_not_cancelled(runtime_state.clone(), &persisted.status.task_id).await?;
+
     persisted.status.stage = UpdateStage::Installing;
     persisted.status.status = UpdateStage::Installing;
     persisted.status.timestamp = now_millis();
@@ -406,9 +426,13 @@ async fn run_update_task(
     )
     .await?;
 
+    ensure_task_not_cancelled(runtime_state.clone(), &persisted.status.task_id).await?;
+
     update
         .install(&package_bytes)
         .map_err(|err| AppError::UpdateInstall(format!("install failed: {err}")))?;
+
+    ensure_task_not_cancelled(runtime_state.clone(), &persisted.status.task_id).await?;
 
     persisted.status.stage = UpdateStage::Ready;
     persisted.status.status = UpdateStage::Ready;
@@ -700,6 +724,9 @@ async fn save_and_emit_status(
     persisted: &PersistedUpdateState,
     event_type: ResumableEventType,
 ) -> Result<(), AppError> {
+    if persisted.status.stage != UpdateStage::Cancelled {
+        ensure_task_not_cancelled(runtime_state.clone(), &persisted.status.task_id).await?;
+    }
     save_state_file(version_dir, persisted).await?;
     store_runtime_status(runtime_state, persisted.status.clone()).await;
     emit_status_event(app, event_type, persisted.status.clone());
@@ -773,6 +800,16 @@ async fn store_runtime_status(
 ) {
     let mut runtime = runtime_state.lock().await;
     runtime.statuses.insert(status.task_id.clone(), status);
+}
+
+async fn ensure_task_not_cancelled(
+    runtime_state: Arc<Mutex<UpdateManagerRuntime>>,
+    task_id: &str,
+) -> Result<(), AppError> {
+    if is_task_cancelled(runtime_state, task_id).await {
+        return Err(AppError::Update("update cancelled".to_string()));
+    }
+    Ok(())
 }
 
 async fn is_task_cancelled(runtime_state: Arc<Mutex<UpdateManagerRuntime>>, task_id: &str) -> bool {
@@ -966,6 +1003,21 @@ fn compute_retry_delay(attempt: u32) -> u64 {
     exp.min(MAX_RETRY_DELAY_MS)
 }
 
+fn can_cancel_from_stage(stage: UpdateStage) -> bool {
+    matches!(stage, UpdateStage::Downloading | UpdateStage::Verifying)
+}
+
+fn stage_label(stage: UpdateStage) -> &'static str {
+    match stage {
+        UpdateStage::Downloading => "downloading",
+        UpdateStage::Verifying => "verifying",
+        UpdateStage::Installing => "installing",
+        UpdateStage::Ready => "ready",
+        UpdateStage::Error => "error",
+        UpdateStage::Cancelled => "cancelled",
+    }
+}
+
 fn updater_pubkey() -> Result<String, AppError> {
     let config_json: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
         .map_err(|err| {
@@ -1089,5 +1141,33 @@ mod tests {
             StatusCode::PARTIAL_CONTENT
         ));
         assert!(!should_restart_full_download(false, StatusCode::OK));
+    }
+
+    #[test]
+    fn cancel_policy_disallows_installing_and_terminal_stages() {
+        assert!(can_cancel_from_stage(UpdateStage::Downloading));
+        assert!(can_cancel_from_stage(UpdateStage::Verifying));
+        assert!(!can_cancel_from_stage(UpdateStage::Installing));
+        assert!(!can_cancel_from_stage(UpdateStage::Ready));
+        assert!(!can_cancel_from_stage(UpdateStage::Error));
+        assert!(!can_cancel_from_stage(UpdateStage::Cancelled));
+    }
+
+    #[tokio::test]
+    async fn ensure_task_not_cancelled_returns_error_when_marked() {
+        let runtime = Arc::new(Mutex::new(UpdateManagerRuntime::default()));
+        {
+            let mut guard = runtime.lock().await;
+            guard.cancelled_tasks.insert("task-1".to_string());
+        }
+
+        let err = ensure_task_not_cancelled(runtime, "task-1")
+            .await
+            .expect_err("expected cancellation error");
+        let message = err.to_string();
+        assert!(
+            message.contains("cancelled"),
+            "expected cancellation in error message, got: {message}"
+        );
     }
 }
