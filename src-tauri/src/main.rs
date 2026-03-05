@@ -20,6 +20,7 @@ mod mobile_gateway;
 mod node_runtime;
 mod plugins;
 mod typesetting;
+mod update_manager;
 mod vector_db;
 mod webdav;
 
@@ -176,6 +177,11 @@ fn main() {
             cloud_relay::cloud_relay_get_status,
             cloud_relay::cloud_relay_start,
             cloud_relay::cloud_relay_stop,
+            // Resumable updater commands
+            update_manager::update_start_resumable_install,
+            update_manager::update_get_resumable_status,
+            update_manager::update_cancel_resumable_install,
+            update_manager::update_clear_resumable_cache,
         ])
         .manage(webdav::commands::WebDAVState::new())
         .manage(agent::AgentState::new())
@@ -183,6 +189,7 @@ fn main() {
         .manage(codex_vscode_host::CodexVscodeHostState::default())
         .manage(mobile_gateway::MobileGatewayState::new())
         .manage(cloud_relay::CloudRelayState::new())
+        .manage(update_manager::UpdateManagerState::default())
         .setup(|app| {
             if let Err(err) = mobile_gateway::hydrate_state(&app.handle()) {
                 eprintln!("[MobileGateway] Failed to hydrate state: {}", err);
