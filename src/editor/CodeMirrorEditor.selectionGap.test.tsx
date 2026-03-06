@@ -196,10 +196,9 @@ describe('CodeMirror live selection gap bridge', () => {
   });
 
   function getCodeBlockEditableIndicatorCount(container: HTMLElement) {
-    const sourceLines = container.querySelectorAll('.cm-codeblock-source');
-    const inlineContent = container.querySelectorAll('.cm-codeblock-content');
-    const widgetContent = container.querySelectorAll('.cm-codeblock-line');
-    return sourceLines.length + inlineContent.length + widgetContent.length;
+    return container.querySelectorAll(
+      '.cm-lumina-codeblock-open, .cm-lumina-codeblock-content-line, .cm-lumina-codeblock-close',
+    ).length;
   }
 
   function getCodeBlockSourceLineCount(container: HTMLElement) {
@@ -245,7 +244,9 @@ describe('CodeMirror live selection gap bridge', () => {
   it('renders code block UI without external margin utility classes', () => {
     const content = '```json\n{"name":"demo"}\n```';
     const { container } = setupEditor(content);
-    const codeBlockUi = container.querySelector('.cm-codeblock-header, .cm-codeblock-widget');
+    const codeBlockUi = container.querySelector(
+      '.cm-lumina-codeblock-open, .cm-codeblock-header, .cm-codeblock-widget',
+    );
     const sourceLines = container.querySelectorAll('.cm-codeblock-source');
     expect(Boolean(codeBlockUi) || sourceLines.length > 0).toBe(true);
     if (codeBlockUi) {
@@ -287,9 +288,9 @@ describe('CodeMirror live selection gap bridge', () => {
     expect(main.to).toBe(codeEnd);
 
     const sourceLines = container.querySelectorAll('.cm-codeblock-source');
-    const selMarks = container.querySelectorAll('.cm-codeblock-sel');
-    const inlineContent = container.querySelectorAll('.cm-codeblock-content');
-    expect(sourceLines.length + selMarks.length + inlineContent.length).toBeGreaterThanOrEqual(1);
+    const liveContent = container.querySelectorAll('.cm-lumina-codeblock-content-line');
+    expect(sourceLines.length).toBe(0);
+    expect(liveContent.length).toBeGreaterThanOrEqual(1);
   });
 
   it('keeps heading mark collapsed when heading line is not active', () => {

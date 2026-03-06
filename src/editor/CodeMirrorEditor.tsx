@@ -14,6 +14,7 @@ import {
   Compartment,
   Prec,
   ChangeSet,
+  Range,
   Text,
 } from '@codemirror/state';
 import { slashCommandExtensions, placeholderExtension } from './extensions/slashCommand';
@@ -32,6 +33,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { Table } from '@lezer/markdown';
 import { syntaxTree } from '@codemirror/language';
+import { common as lowlightCommon, createLowlight } from 'lowlight';
 import katex from 'katex';
 import mermaid from 'mermaid';
 import {
@@ -296,15 +298,42 @@ const createEditorTheme = (fontSize: number) =>
       boxShadow: 'var(--lumina-codeblock-shadow)',
       backdropFilter: 'blur(6px)',
     },
-    '.cm-lumina-codeblock-shell': {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      minHeight: '36px',
-      padding: '7px 12px 7px 14px',
+    '.cm-lumina-codeblock-open': {
+      paddingLeft: '14px !important',
+      paddingRight: '14px !important',
+      paddingTop: '8px !important',
+      paddingBottom: '2px !important',
       backgroundColor: 'var(--lumina-codeblock-bg)',
+      color: 'hsl(var(--muted-foreground) / 0.78)',
+      fontFamily: "'JetBrains Mono', monospace",
       border: '1px solid var(--lumina-codeblock-border)',
       borderBottom: '1px solid var(--lumina-codeblock-border-soft)',
+      borderRadius: '14px 14px 0 0',
+      boxShadow: 'var(--lumina-codeblock-shadow)',
+      backdropFilter: 'blur(6px)',
+    },
+    '.cm-lumina-codeblock-content-line': {
+      backgroundColor: 'var(--lumina-codeblock-bg)',
+      color: 'hsl(var(--foreground) / 0.96)',
+      fontFamily: "'JetBrains Mono', monospace",
+      paddingLeft: '14px !important',
+      paddingRight: '14px !important',
+      lineHeight: '1.7 !important',
+      boxShadow:
+        'inset 1px 0 0 var(--lumina-codeblock-border), inset -1px 0 0 var(--lumina-codeblock-border)',
+    },
+    '.cm-lumina-codeblock-close': {
+      paddingLeft: '14px !important',
+      paddingRight: '14px !important',
+      paddingTop: '2px !important',
+      paddingBottom: '8px !important',
+      backgroundColor: 'var(--lumina-codeblock-bg)',
+      color: 'hsl(var(--muted-foreground) / 0.78)',
+      fontFamily: "'JetBrains Mono', monospace",
+      borderLeft: '1px solid var(--lumina-codeblock-border)',
+      borderRight: '1px solid var(--lumina-codeblock-border)',
+      borderBottom: '1px solid var(--lumina-codeblock-border)',
+      borderRadius: '0 0 14px 14px',
       boxShadow: 'var(--lumina-codeblock-shadow)',
       backdropFilter: 'blur(6px)',
     },
@@ -328,6 +357,10 @@ const createEditorTheme = (fontSize: number) =>
     '.cm-codeblock-fence': {
       color: 'hsl(var(--muted-foreground) / 0.6)',
     },
+    '.cm-lumina-codeblock-open .cm-codeblock-fence, .cm-lumina-codeblock-close .cm-codeblock-fence':
+      {
+        color: 'hsl(var(--muted-foreground) / 0.72)',
+      },
     '.cm-codeblock-source-toggle': {
       justifyContent: 'flex-end',
       borderRadius: '14px 14px 0 0',
@@ -887,31 +920,142 @@ const livePreviewPlugin = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-const codeBlockShellPlugin = ViewPlugin.fromClass(
-  class {
-    constructor(view: EditorView) {
-      this.sync(view);
-    }
+const LIVE_CODE_BLOCK_SKIPPED_LANGUAGES = new Set(['mermaid']);
+const liveCodeBlockLowlight = createLowlight(lowlightCommon);
 
-    update(update: ViewUpdate) {
-      if (
-        update.docChanged ||
-        update.selectionSet ||
-        update.viewportChanged ||
-        update.transactions.some((tr) => tr.reconfigured)
-      ) {
-        this.sync(update.view);
-      }
-    }
+function addLiveCodeBlockHighlightMarks(
+  decorations: Range<Decoration>[],
+  nodes: any[] | undefined,
+  offset: { value: number },
+  absoluteFrom: number,
+) {
+  if (!nodes?.length) return;
 
-    sync(view: EditorView) {
-      const shellNodes = view.dom.querySelectorAll(
-        '.cm-codeblock-widget, .cm-codeblock-header, .cm-codeblock-source-toggle',
+  for (const node of nodes) {
+    if (node.type === 'text') {
+      offset.value += node.value?.length ?? 0;
+      continue;
+    }
+    if (node.type !== 'element') continue;
+
+    const start = offset.value;
+    addLiveCodeBlockHighlightMarks(decorations, node.children, offset, absoluteFrom);
+    const end = offset.value;
+    const classNames = Array.isArray(node.properties?.className)
+      ? node.properties.className.filter((name: unknown): name is string => typeof name === 'string')
+      : [];
+
+    if (start < end && classNames.length > 0) {
+      decorations.push(
+        Decoration.mark({ class: classNames.join(' ') }).range(
+          absoluteFrom + start,
+          absoluteFrom + end,
+        ),
       );
-      shellNodes.forEach((node) => node.classList.add('cm-lumina-codeblock-shell'));
     }
+  }
+}
+
+function addLiveCodeBlockSyntaxHighlight(
+  decorations: Range<Decoration>[],
+  code: string,
+  language: string,
+  absoluteFrom: number,
+) {
+  if (!code) return;
+
+  try {
+    const normalizedLanguage = language.trim().toLowerCase();
+    const tree =
+      normalizedLanguage && liveCodeBlockLowlight.registered(normalizedLanguage)
+        ? liveCodeBlockLowlight.highlight(normalizedLanguage, code)
+        : normalizedLanguage
+          ? null
+          : liveCodeBlockLowlight.highlightAuto(code);
+
+    if (!tree) return;
+    addLiveCodeBlockHighlightMarks(decorations, tree.children, { value: 0 }, absoluteFrom);
+  } catch {
+    // Keep editing functional even when highlight.js cannot parse a language.
+  }
+}
+
+function buildEditableCodeBlockDecorations(state: EditorState): DecorationSet {
+  const decorations: Range<Decoration>[] = [];
+
+  syntaxTree(state).iterate({
+    enter: (node) => {
+      if (node.name !== 'FencedCode') return;
+
+      const codeInfo = node.node.getChild('CodeInfo');
+      const language = codeInfo ? state.doc.sliceString(codeInfo.from, codeInfo.to).trim() : '';
+      if (LIVE_CODE_BLOCK_SKIPPED_LANGUAGES.has(language.toLowerCase())) {
+        return;
+      }
+      const codeText = node.node.getChild('CodeText');
+
+      const openLine = state.doc.lineAt(node.from);
+      const closeLine = state.doc.lineAt(Math.max(node.from, node.to - 1));
+
+      decorations.push(Decoration.line({ class: 'cm-lumina-codeblock-open' }).range(openLine.from));
+      for (let lineNumber = openLine.number + 1; lineNumber < closeLine.number; lineNumber += 1) {
+        const line = state.doc.line(lineNumber);
+        decorations.push(
+          Decoration.line({ class: 'cm-lumina-codeblock-content-line' }).range(line.from),
+        );
+      }
+      decorations.push(
+        Decoration.line({ class: 'cm-lumina-codeblock-close' }).range(closeLine.from),
+      );
+
+      const openFenceEnd = codeInfo ? codeInfo.from : openLine.to;
+      if (openFenceEnd > openLine.from) {
+        decorations.push(
+          Decoration.mark({ class: 'cm-codeblock-fence' }).range(openLine.from, openFenceEnd),
+        );
+      }
+      if (codeInfo && codeInfo.from < codeInfo.to) {
+        decorations.push(
+          Decoration.mark({ class: 'cm-codeblock-lang' }).range(codeInfo.from, codeInfo.to),
+        );
+      }
+      if (codeInfo && codeInfo.to < openLine.to) {
+        decorations.push(
+          Decoration.mark({ class: 'cm-codeblock-fence' }).range(codeInfo.to, openLine.to),
+        );
+      }
+      if (closeLine.to > closeLine.from) {
+        decorations.push(
+          Decoration.mark({ class: 'cm-codeblock-fence' }).range(closeLine.from, closeLine.to),
+        );
+      }
+      if (codeText) {
+        addLiveCodeBlockSyntaxHighlight(
+          decorations,
+          state.doc.sliceString(codeText.from, codeText.to),
+          language,
+          codeText.from,
+        );
+      }
+    },
+  });
+
+  return Decoration.set(
+    decorations.sort((a, b) => a.from - b.from),
+    true,
+  );
+}
+
+const editableCodeBlockField = StateField.define<DecorationSet>({
+  create: buildEditableCodeBlockDecorations,
+  update(deco, tr) {
+    if (tr.docChanged || tr.reconfigured) {
+      return buildEditableCodeBlockDecorations(tr.state);
+    }
+    return deco;
   },
-);
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 // 共享 doc.toString() 缓存：Text 是不可变持久化结构，同一引用 = 同一内容
 let _cachedDoc: Text | null = null;
@@ -2630,8 +2774,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
               collapseOnSelectionFacet.of(true),
               livePreviewPlugin,
               tableEditorPlugin(),
-              codeBlockShellPlugin,
-              codeBlockField({ interaction: 'inline', copyButton: true }),
+              // 保持 fenced code 在 live 模式下为稳定的可编辑单态，避免依赖的 selection/render 脱节。
+              editableCodeBlockField,
               ...widgets,
             ];
           case 'source':
