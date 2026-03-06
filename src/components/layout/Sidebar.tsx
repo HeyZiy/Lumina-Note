@@ -38,6 +38,7 @@ import { useSplitStore } from "@/stores/useSplitStore";
 import { useFavoriteStore } from "@/stores/useFavoriteStore";
 import { reportOperationError } from "@/lib/reportError";
 import { useShallow } from "zustand/react/shallow";
+import { SIDEBAR_SURFACE_CLASSNAME } from "./sidebarSurface";
 
 interface ContextMenuState {
   x: number;
@@ -702,7 +703,7 @@ export function Sidebar() {
   }, [vaultPath]);
 
   return (
-    <aside className="ui-compact-row relative overflow-hidden w-full h-full border-r border-border/60 flex flex-col bg-background/55 backdrop-blur-md shadow-[inset_-1px_0_0_hsl(var(--border)/0.6)] transition-colors duration-300 after:absolute after:pointer-events-none after:top-6 after:bottom-6 after:right-1 after:w-[3px] after:rounded-full after:bg-gradient-to-b after:from-foreground/42 after:via-foreground/15 after:to-transparent after:opacity-0 after:transition-opacity after:duration-200 hover:after:opacity-100 dark:after:from-foreground/30 dark:after:via-foreground/12">
+    <aside className={SIDEBAR_SURFACE_CLASSNAME}>
       {/* Header */}
       <div className="p-3 flex items-center justify-between text-[10px] font-semibold text-muted-foreground tracking-[0.2em] uppercase">
         <span className="ui-compact-text ui-compact-hide-md">{t.sidebar.files}</span>
