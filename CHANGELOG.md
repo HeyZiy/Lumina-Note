@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-03-06
+
+### 修复
+- 修复网络映射盘与 UNC 网络路径工作区在重启应用后无法重新打开的问题，启动恢复时会先同步运行时文件系统访问根目录
+
 ## [1.0.0] - 2026-03-05
 
 ### 新功能
