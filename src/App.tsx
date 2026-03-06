@@ -32,7 +32,7 @@ import { useAIStore } from "@/stores/useAIStore";
 import { initRustAgentListeners } from "@/stores/useRustAgentStore";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import { getDragData, clearDragData } from "@/lib/dragState";
-import { saveFile } from "@/lib/tauri";
+import { saveFile, startFileWatcher } from "@/lib/tauri";
 import { TitleBar } from "@/components/layout/TitleBar";
 import { VoiceInputBall } from "@/components/ai/VoiceInputBall";
 import { enableDebugLogger, disableDebugLogger } from "@/lib/debugLogger";
@@ -348,7 +348,6 @@ function App() {
     const setupWatcher = async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
-        const { startFileWatcher } = await import("@/lib/tauri");
         const { handleFsChangeEvent } = await import("@/lib/fsChange");
         const { reloadFileIfOpen } = useFileStore.getState();
         const { reloadSecondaryIfOpen } = (await import("@/stores/useSplitStore")).useSplitStore.getState();
