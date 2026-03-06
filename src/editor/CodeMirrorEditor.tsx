@@ -154,6 +154,10 @@ const createEditorTheme = (fontSize: number) =>
       transition: 'none !important',
       animation: 'none !important',
     },
+    '&.cm-drag-native-selection-suppressed, &.cm-drag-native-selection-suppressed *': {
+      userSelect: 'none !important',
+      WebkitUserSelect: 'none !important',
+    },
 
     // 块级标记 (标题/列表/引用) - 默认隐藏
     '.cm-formatting-block': {
@@ -1149,12 +1153,15 @@ const selectionStatePlugin = ViewPlugin.fromClass(
     destroy() {
       this.view.dom.classList.remove('cm-has-selection');
       this.view.dom.classList.remove('cm-drag-selecting');
+      this.view.dom.classList.remove('cm-drag-native-selection-suppressed');
     }
     private updateClass(view: EditorView) {
       const isDragging = view.state.field(mouseSelectingField, false);
       const hasSelection = view.state.selection.ranges.some((range) => range.from !== range.to);
+      const suppressNativeSelection = isDragging && shouldDisableDrawSelectionForTauriWebKit();
       view.dom.classList.toggle('cm-drag-selecting', isDragging);
       view.dom.classList.toggle('cm-has-selection', hasSelection);
+      view.dom.classList.toggle('cm-drag-native-selection-suppressed', suppressNativeSelection);
       const main = view.state.selection.main;
       const detail = hasSelection
         ? {
@@ -1191,8 +1198,12 @@ const selectionBridgeField = StateField.define<DecorationSet>({
     const wasDragging = tr.startState.field(mouseSelectingField, false);
     if (wasDragging && !isDragging) return buildSelectionBridgeDecorations(tr.state);
     if (!tr.selection) return deco;
-    // During drag, clear bridge overlays to avoid stale/flickering highlight layers.
-    if (isDragging) return Decoration.none;
+    if (isDragging) {
+      if (shouldDisableDrawSelectionForTauriWebKit()) {
+        return buildSelectionBridgeDecorations(tr.state);
+      }
+      return Decoration.none;
+    }
     return buildSelectionBridgeDecorations(tr.state);
   },
   provide: (f) => EditorView.decorations.from(f),
@@ -1215,10 +1226,74 @@ function selectAllDebugEnabled() {
   return typeof window !== 'undefined' && (window as any).__cmSelectAllDebug === true;
 }
 
+type DragLineRange = { from: number; to: number };
+
+type ManualDragSelectableView = {
+  inputState?: {
+    mouseSelection?: {
+      destroy?: () => void;
+    } | null;
+  } | null;
+};
+
+export function cancelNativeMouseSelectionForManualDrag(view: ManualDragSelectableView) {
+  const inputState = view.inputState;
+  const mouseSelection = inputState?.mouseSelection;
+  if (!mouseSelection || typeof mouseSelection.destroy !== 'function') {
+    return false;
+  }
+  mouseSelection.destroy();
+  if (inputState?.mouseSelection === mouseSelection) {
+    inputState.mouseSelection = null;
+  }
+  return true;
+}
+
+export function syncDragSelectionHeadFromCoords(
+  view: Pick<EditorView, 'posAtCoords' | 'dispatch' | 'state'>,
+  anchor: number,
+  x: number,
+  y: number,
+  lineRange?: DragLineRange | null,
+) {
+  let head = view.posAtCoords({ x, y }) ?? view.state.selection.main.head;
+  if (lineRange) {
+    head = Math.max(lineRange.from, Math.min(lineRange.to, head));
+  }
+  const currentAnchor = view.state.selection.main.anchor;
+  const currentHead = view.state.selection.main.head;
+  const currentFrom = view.state.selection.main.from ?? Math.min(currentAnchor, currentHead);
+  const currentTo = view.state.selection.main.to ?? Math.max(currentAnchor, currentHead);
+  const nextFrom = Math.min(anchor, head);
+  const nextTo = Math.max(anchor, head);
+  if (currentFrom === nextFrom && currentTo === nextTo) {
+    return false;
+  }
+  view.dispatch({ selection: { anchor, head } });
+  return true;
+}
+
+function getDragLineRangeFromTarget(
+  view: Pick<EditorView, 'posAtDOM' | 'state'>,
+  target: EventTarget | null,
+): DragLineRange | null {
+  const element = target instanceof HTMLElement ? target : null;
+  const line = element?.closest('.cm-line');
+  if (!line) return null;
+  try {
+    const lineStart = view.posAtDOM(line, 0);
+    const docLine = view.state.doc.lineAt(lineStart);
+    return { from: docLine.from, to: docLine.to };
+  } catch {
+    return null;
+  }
+}
+
 function shouldDisableDrawSelectionForTauriWebKit() {
-  if (typeof process !== 'undefined' && (process as any)?.env?.VITEST) return false;
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
   const w = window as any;
+  if (w.__cmForceDisableDrawSelection === true) return true;
+  if (typeof process !== 'undefined' && (process as any)?.env?.VITEST) return false;
   const isTauriRuntime = '__TAURI_INTERNALS__' in w || '__TAURI__' in w;
   if (!isTauriRuntime) return false;
   const ua = navigator.userAgent || '';
@@ -1249,6 +1324,7 @@ function selectionVisualTraceEnabled() {
   if (typeof window === 'undefined') return false;
   const w = window as any;
   if (w.__cmSelectionTraceEnabled === true) return true;
+  if (import.meta.env.DEV && shouldDisableDrawSelectionForTauriWebKit()) return true;
   try {
     return window.localStorage.getItem(CM_SELECTION_TRACE_STORAGE_KEY) === '1';
   } catch {
@@ -2652,8 +2728,38 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       let dragSelectionActive = false;
       let mouseDownX = 0;
       let mouseDownY = 0;
+      let lastDragMoveSampleAt = 0;
+      let dragSelectionAnchor: number | null = null;
+      let lastDragLineRange: DragLineRange | null = null;
+      const manualDragSelectionSyncEnabled = shouldDisableDrawSelectionForTauriWebKit();
+
+      const syncDragSelectionFromCoords = (
+        x: number,
+        y: number,
+        source: string,
+        lineRange: DragLineRange | null = lastDragLineRange,
+      ) => {
+        if (!manualDragSelectionSyncEnabled) return false;
+        if (dragSelectionAnchor === null) {
+          dragSelectionAnchor = view.state.selection.main.anchor;
+        }
+        lastDragLineRange = lineRange;
+        const changed = syncDragSelectionHeadFromCoords(view, dragSelectionAnchor, x, y, lineRange);
+        if (changed) {
+          selectionTrace.event('drag-selection-synced', {
+            source,
+            x,
+            y,
+            anchor: dragSelectionAnchor,
+            head: view.state.selection.main.head,
+          });
+          selectionTrace.snapshot('drag-selection-synced');
+        }
+        return changed;
+      };
 
       const clearDragSelectionState = () => {
+        const hadDragSelection = dragSelectionActive;
         selectionTrace.event('drag-clear-requested', {
           mouseDownActive,
           dragSelectionActive,
@@ -2662,7 +2768,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         });
         selectionTrace.snapshot('drag-clear-requested');
         mouseDownActive = false;
-        if (!dragSelectionActive) {
+        dragSelectionAnchor = null;
+        lastDragLineRange = null;
+        if (!hadDragSelection) {
           stopSelectionProbe();
           return;
         }
@@ -2692,6 +2800,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         mouseDownActive = true;
         mouseDownX = event.clientX;
         mouseDownY = event.clientY;
+        dragSelectionAnchor = null;
+        lastDragLineRange = getDragLineRangeFromTarget(view, event.target);
         selectionTrace.event('mouse-down', {
           x: event.clientX,
           y: event.clientY,
@@ -2702,29 +2812,78 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         reportSelectionVisualAnomaly('mousedown');
       };
       const handleMouseMove = (event: MouseEvent) => {
-        if (!mouseDownActive || dragSelectionActive || (event.buttons & 1) === 0) return;
+        if (!mouseDownActive || (event.buttons & 1) === 0) return;
         const dx = Math.abs(event.clientX - mouseDownX);
         const dy = Math.abs(event.clientY - mouseDownY);
-        if (dx < DRAG_SELECTION_THRESHOLD_PX && dy < DRAG_SELECTION_THRESHOLD_PX) return;
-        dragSelectionActive = true;
-        view.dispatch({ effects: setMouseSelecting.of(true) });
-        selectionTrace.event('drag-start-dispatch', {
-          dx,
-          dy,
-          threshold: DRAG_SELECTION_THRESHOLD_PX,
-          dragClass: view.dom.classList.contains('cm-drag-selecting'),
-          mouseSelectingField: view.state.field(mouseSelectingField, false),
-        });
-        selectionTrace.snapshot('drag-start-dispatch');
-        requestAnimationFrame(() => {
-          selectionTrace.event('drag-start-next-frame', {
+        if (!dragSelectionActive) {
+          if (dx < DRAG_SELECTION_THRESHOLD_PX && dy < DRAG_SELECTION_THRESHOLD_PX) return;
+          dragSelectionActive = true;
+          lastDragMoveSampleAt = 0;
+          dragSelectionAnchor = view.state.selection.main.anchor;
+          let cancelledNativeMouseSelection = false;
+          if (manualDragSelectionSyncEnabled) {
+            cancelledNativeMouseSelection = cancelNativeMouseSelectionForManualDrag(view as any);
+            ownerDoc.getSelection()?.removeAllRanges();
+            event.preventDefault();
+          }
+          view.dispatch({ effects: setMouseSelecting.of(true) });
+          selectionTrace.event('drag-start-dispatch', {
+            dx,
+            dy,
+            threshold: DRAG_SELECTION_THRESHOLD_PX,
+            cancelledNativeMouseSelection,
             dragClass: view.dom.classList.contains('cm-drag-selecting'),
             mouseSelectingField: view.state.field(mouseSelectingField, false),
           });
-          selectionTrace.snapshot('drag-start-next-frame');
+          selectionTrace.snapshot('drag-start-dispatch');
+          requestAnimationFrame(() => {
+            selectionTrace.event('drag-start-next-frame', {
+              dragClass: view.dom.classList.contains('cm-drag-selecting'),
+              mouseSelectingField: view.state.field(mouseSelectingField, false),
+            });
+            selectionTrace.snapshot('drag-start-next-frame');
+          });
+          const dragLineRange = getDragLineRangeFromTarget(view, event.target);
+          if (syncDragSelectionFromCoords(event.clientX, event.clientY, 'drag-start', dragLineRange)) {
+            event.preventDefault();
+          }
+          startSelectionProbe();
+          reportSelectionVisualAnomaly('drag-start');
+          return;
+        }
+
+        const dragLineRange = getDragLineRangeFromTarget(view, event.target);
+        if (manualDragSelectionSyncEnabled) {
+          event.preventDefault();
+        }
+        if (syncDragSelectionFromCoords(event.clientX, event.clientY, 'drag-move', dragLineRange)) {
+          event.preventDefault();
+        }
+
+        const now = Date.now();
+        if (now - lastDragMoveSampleAt < 90) return;
+        lastDragMoveSampleAt = now;
+        const target = event.target instanceof HTMLElement ? event.target : null;
+        const line = target?.closest('.cm-line') as HTMLElement | null;
+        const lineRect = line?.getBoundingClientRect() ?? null;
+        selectionTrace.event('drag-move-sampled', {
+          x: event.clientX,
+          y: event.clientY,
+          dx,
+          dy,
+          dragClass: view.dom.classList.contains('cm-drag-selecting'),
+          mouseSelectingField: view.state.field(mouseSelectingField, false),
+          targetTag: target?.tagName || 'unknown',
+          targetClass: target?.className || '',
+          lineText: (line?.textContent || '').slice(0, 160),
+          lineRect: snapshotRect(lineRect),
+          currentSelection: {
+            from: view.state.selection.main.from,
+            to: view.state.selection.main.to,
+            selectedLength: view.state.selection.main.to - view.state.selection.main.from,
+          },
         });
-        startSelectionProbe();
-        reportSelectionVisualAnomaly('drag-start');
+        selectionTrace.snapshot('drag-move-sampled');
       };
       const handleMouseUp = () => {
         selectionTrace.event('mouse-up', {

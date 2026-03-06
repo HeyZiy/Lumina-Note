@@ -21,6 +21,10 @@ interface SelectionToolbarProps {
   containerRef: React.RefObject<HTMLElement>;
 }
 
+function isSelectionDragActive(container: HTMLElement | null) {
+  return Boolean(container?.querySelector('.cm-editor.cm-drag-selecting'));
+}
+
 export function SelectionToolbar({ containerRef }: SelectionToolbarProps) {
   const { t } = useLocaleStore();
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
@@ -36,8 +40,15 @@ export function SelectionToolbar({ containerRef }: SelectionToolbarProps) {
 
   const handleSelectionChange = useCallback(() => {
     const selection = window.getSelection();
-    
+    const container = containerRef.current;
+
     if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+      setPosition(null);
+      setSelectedText("");
+      return;
+    }
+
+    if (isSelectionDragActive(container)) {
       setPosition(null);
       setSelectedText("");
       return;
@@ -45,8 +56,7 @@ export function SelectionToolbar({ containerRef }: SelectionToolbarProps) {
 
     // 检查选区是否在容器内
     const range = selection.getRangeAt(0);
-    const container = containerRef.current;
-    
+
     if (!container || !container.contains(range.commonAncestorContainer)) {
       setPosition(null);
       setSelectedText("");
@@ -113,6 +123,20 @@ export function SelectionToolbar({ containerRef }: SelectionToolbarProps) {
       document.removeEventListener("selectionchange", handleSelectionChange);
     };
   }, [handleSelectionChange]);
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (isSelectionDragActive(containerRef.current)) return;
+      window.requestAnimationFrame(() => {
+        handleSelectionChange();
+      });
+    };
+
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [containerRef, handleSelectionChange]);
 
   // 点击外部时隐藏
   useEffect(() => {
