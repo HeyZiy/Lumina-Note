@@ -37,18 +37,23 @@ curl -X POST http://127.0.0.1:8787/auth/login \
 
 The response includes:
 - `token`
-- `user_id`
+- `user` (`id`, `email`)
+- `user_id` (legacy compatibility)
 - `workspaces` (pick `id`)
 
-## Desktop WebDAV config
+## Desktop cloud config
 
-Use WebDAV settings:
-- `server_url`: `http://127.0.0.1:8787/dav`
-- `username`: your email
-- `password`: your password
-- `remote_base_path`: `/<workspace_id>`
+In **Settings → WebDAV Sync** fill in:
+- `Cloud server`: `http://127.0.0.1:8787`
+- `Email`: your email
+- `Password`: your password
 
-Then run "Test Connection" and "Sync".
+Then:
+1. Click `Register` or `Login`
+2. Pick a `Cloud workspace`
+3. Confirm the derived WebDAV URL is `http://127.0.0.1:8787/dav`
+4. Confirm the derived remote path is `/<workspace_id>`
+5. Run `Test Connection`, `Preview Sync`, then `Sync Now`
 
 ## Cloud relay (dev)
 

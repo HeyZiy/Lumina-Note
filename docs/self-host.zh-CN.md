@@ -43,7 +43,21 @@ curl -X POST https://你的域名/auth/register \
 
 ## 桌面端配置
 
-在 **设置 → 云端中继** 中填写：
+在 **设置 → WebDAV Sync** 中填写：
+
+- Cloud server：`https://你的域名`
+- 邮箱 / 密码：你刚注册的账号
+
+点击 **Register** 或 **Login**，然后选择一个 `Cloud workspace`。
+
+界面会自动生成：
+
+- Derived WebDAV URL：`https://你的域名/dav`
+- Derived remote path：`/<workspace_id>`
+
+接着点击 **Test Connection**，成功后再执行 **Preview Sync / Sync Now**。
+
+如果你要使用手机配对，再到 **设置 → 云端中继** 中填写：
 
 - 中继地址：`wss://你的域名/relay`
 - 邮箱 / 密码：你刚注册的账号
