@@ -315,8 +315,14 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       <div className="fixed inset-0 bg-black/45 backdrop-blur-[2px] z-50" onClick={onClose} />
 
       {/* Search Panel */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-4 sm:px-6 sm:py-8">
-        <div className="w-full max-w-4xl h-[min(84vh,48rem)] bg-background/95 backdrop-blur-xl border border-border/70 rounded-2xl z-50 flex flex-col overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center px-4 py-4 sm:px-6 sm:py-8"
+        onClick={onClose}
+      >
+        <div
+          className="w-full max-w-4xl h-[min(84vh,48rem)] bg-background/95 backdrop-blur-xl border border-border/70 rounded-2xl z-50 flex flex-col overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.32)]"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div className="px-4 py-3 border-b border-border/80 flex items-center justify-between sm:px-5">
             <span className="font-medium text-sm flex items-center gap-2 sm:text-base">
