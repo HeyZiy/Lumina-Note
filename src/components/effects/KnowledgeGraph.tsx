@@ -207,6 +207,10 @@ interface ContextMenuState {
   node: GraphNode;
 }
 
+interface HoverPreviewState {
+  nodeId: string;
+}
+
 // ==================== 全局图数据缓存 ====================
 // 避免每个 KnowledgeGraph 实例重复读取文件
 interface GraphCache {
@@ -229,6 +233,9 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
   const animationRef = useRef<number | null>(null);
   const nodesRef = useRef<GraphNode[]>([]);
   const edgesRef = useRef<GraphEdge[]>([]);
+  const hoverPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emphasisRef = useRef<Map<string, number>>(new Map());
+  const focusBlendRef = useRef(0);
 
   const { fileTree, currentFile, openFile, openIsolatedGraphTab } = useFileStore(
     useShallow((state) => ({
@@ -246,6 +253,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 400, height: 400 });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
 
   const isDraggingCanvas = useRef(false);
   const isDraggingNode = useRef(false);
@@ -268,6 +276,13 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
   const [nodeSize, setNodeSize] = useState(1.0);
   const [showLabels, setShowLabels] = useState(true);
   const [showFolders, setShowFolders] = useState(true); // 是否显示文件夹节点
+
+  const getNodeBaseRadius = useCallback((node: GraphNode) => {
+    const baseRadius = node.isFolder
+      ? Math.max(8, 10 + Math.log((node.connections || 1) + 1) * 3)
+      : Math.max(4, 5 + Math.log(node.connections + 1) * 4);
+    return Math.min(baseRadius * nodeSize, node.isFolder ? 30 : 25);
+  }, [nodeSize]);
 
   // 应用图数据（支持孤立视图过滤和文件夹过滤）- 必须在 buildGraph 之前定义
   const applyGraphData = useCallback((nodes: GraphNode[], edges: GraphEdge[], includeFolders: boolean) => {
@@ -501,8 +516,47 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+      if (hoverPreviewTimerRef.current) {
+        clearTimeout(hoverPreviewTimerRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (hoverPreviewTimerRef.current) {
+      clearTimeout(hoverPreviewTimerRef.current);
+      hoverPreviewTimerRef.current = null;
+    }
+
+    if (!hoverNode || isDraggingCanvas.current || isDraggingNode.current) {
+      setHoverPreview(null);
+      return;
+    }
+
+    hoverPreviewTimerRef.current = setTimeout(() => {
+      setHoverPreview((prev) => (prev?.nodeId === hoverNode ? prev : { nodeId: hoverNode }));
+    }, 120);
+
+    return () => {
+      if (hoverPreviewTimerRef.current) {
+        clearTimeout(hoverPreviewTimerRef.current);
+        hoverPreviewTimerRef.current = null;
+      }
+    };
+  }, [hoverNode]);
+
+  useEffect(() => {
+    if (selectedNode) {
+      setHoverPreview(null);
+    }
+  }, [selectedNode]);
+
+  useEffect(() => {
+    if (!hoverNode && !selectedNode) {
+      emphasisRef.current.clear();
+      focusBlendRef.current = 0;
+    }
+  }, [hoverNode, selectedNode]);
 
   // Render loop with high DPI support
   const render = useCallback(() => {
@@ -540,11 +594,26 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
     const nodeById = new Map(nodesRef.current.map((node) => [node.id, node]));
     const focusNodeId = hoverNode || selectedNode?.id || null;
     const connectedToFocus = new Set<string>();
+    const emphasis = emphasisRef.current;
+    const focusBlendTarget = hasSelection ? 1 : 0;
+    focusBlendRef.current += (focusBlendTarget - focusBlendRef.current) * 0.16;
+    const focusBlend = focusBlendRef.current;
+
     if (focusNodeId) {
       edgesRef.current.forEach((edge) => {
         if (edge.source === focusNodeId) connectedToFocus.add(edge.target);
         if (edge.target === focusNodeId) connectedToFocus.add(edge.source);
       });
+    }
+
+    for (const node of nodesRef.current) {
+      const isHovered = node.id === hoverNode;
+      const isSelected = selectedNode?.id === node.id;
+      const isNeighbor = focusNodeId ? connectedToFocus.has(node.id) : false;
+      const isCurrent = !node.isFolder && currentFile?.includes(node.label);
+      const target = isHovered || isSelected ? 1 : isNeighbor ? 0.62 : isCurrent && !hasSelection ? 0.2 : 0;
+      const next = (emphasis.get(node.id) ?? 0) + (target - (emphasis.get(node.id) ?? 0)) * 0.18;
+      emphasis.set(node.id, next);
     }
 
     // Draw edges
@@ -553,37 +622,25 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
       const v = nodeById.get(edge.target);
       if (!u || !v) return;
 
-      const isHighlighted =
-        (hoverNode && (u.id === hoverNode || v.id === hoverNode)) ||
-        (selectedNode && (u.id === selectedNode.id || v.id === selectedNode.id));
-
       const isHierarchy = edge.type === 'hierarchy';
+      const edgeEmphasis = Math.max(emphasis.get(u.id) ?? 0, emphasis.get(v.id) ?? 0);
+      const baseAlpha = isHierarchy ? 0.5 : 0.4;
+      const idleWidth = (isHierarchy ? 1.5 : 1) / zoom;
+      const focusWidth = (isHierarchy ? 2.5 : 2) / zoom;
+      const dimmedAlpha = baseAlpha * (1 - 0.78 * focusBlend);
+      const effectiveAlpha = dimmedAlpha + (0.88 - dimmedAlpha) * edgeEmphasis;
 
       ctx.beginPath();
       ctx.moveTo(u.x, u.y);
       ctx.lineTo(v.x, v.y);
 
-      if (hasSelection) {
-        if (isHighlighted) {
-          ctx.strokeStyle = isHierarchy ? (u.color || "hsl(var(--primary))") : "hsl(var(--primary))";
-          ctx.globalAlpha = 0.8;
-          ctx.lineWidth = (isHierarchy ? 2.5 : 2) / zoom;
-        } else {
-          ctx.strokeStyle = "hsl(var(--muted-foreground))";
-          ctx.globalAlpha = 0.1;
-          ctx.lineWidth = 1 / zoom;
-        }
-      } else {
-        if (isHierarchy) {
-          ctx.strokeStyle = u.color || "hsl(var(--muted-foreground))";
-          ctx.globalAlpha = 0.5;
-          ctx.lineWidth = 1.5 / zoom;
-        } else {
-          ctx.strokeStyle = "hsl(var(--muted-foreground))";
-          ctx.globalAlpha = 0.4;
-          ctx.lineWidth = 1 / zoom;
-        }
-      }
+      ctx.strokeStyle = edgeEmphasis > 0.2
+        ? (isHierarchy ? (u.color || "hsl(var(--primary))") : "hsl(var(--primary))")
+        : isHierarchy
+          ? (u.color || "hsl(var(--muted-foreground))")
+          : "hsl(var(--muted-foreground))";
+      ctx.globalAlpha = effectiveAlpha;
+      ctx.lineWidth = idleWidth + (focusWidth - idleWidth) * edgeEmphasis;
       ctx.stroke();
 
       // 绘制箭头（仅层级边）
@@ -611,27 +668,19 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
 
     // Draw nodes
     nodesRef.current.forEach((node) => {
-      const isHovered = node.id === hoverNode;
-      const isSelected = selectedNode && node.id === selectedNode.id;
       const isCurrent = !node.isFolder && currentFile?.includes(node.label);
+      const nodeEmphasis = emphasis.get(node.id) ?? 0;
+      const radius = getNodeBaseRadius(node) * (1 + nodeEmphasis * 0.14);
+      const idleAlpha = hasSelection ? 1 - 0.82 * focusBlend : 1;
+      const isHighlighted = nodeEmphasis > 0.16 || isCurrent;
 
-      const isNeighbor = focusNodeId ? connectedToFocus.has(node.id) : false;
-
-      const isHighlighted = isHovered || isSelected || isNeighbor || isCurrent;
-
-      ctx.globalAlpha = hasSelection && !isHighlighted ? 0.15 : 1;
-
-      // 使用对数缩放，限制最大尺寸
-      const baseRadius = node.isFolder
-        ? Math.max(8, 10 + Math.log((node.connections || 1) + 1) * 3)
-        : Math.max(4, 5 + Math.log(node.connections + 1) * 4);
-      const radius = Math.min(baseRadius * nodeSize, node.isFolder ? 30 : 25);
+      ctx.globalAlpha = idleAlpha + (1 - idleAlpha) * nodeEmphasis;
 
       // 确定节点颜色
       let nodeColor = node.color || "hsl(var(--muted-foreground))";
       if (isCurrent) {
         nodeColor = "hsl(var(--primary))";
-      } else if (isHighlighted && !node.isFolder) {
+      } else if (nodeEmphasis > 0.2 && !node.isFolder) {
         // 高亮时稍微调亮
         nodeColor = node.color || "hsl(var(--primary) / 0.8)";
       }
@@ -660,7 +709,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
 
         // 文件夹节点边框
         ctx.strokeStyle = isHighlighted ? "hsl(var(--foreground))" : nodeColor;
-        ctx.lineWidth = (isHighlighted ? 2.5 : 1.5) / zoom;
+        ctx.lineWidth = ((1.5 / zoom) + ((2.5 / zoom) - (1.5 / zoom)) * nodeEmphasis);
         ctx.stroke();
 
         // 中心小圆
@@ -676,16 +725,17 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
         ctx.fill();
 
         // Node border
-        if (isHighlighted) {
+        if (nodeEmphasis > 0.14 || isCurrent) {
           ctx.strokeStyle = "hsl(var(--foreground))";
-          ctx.lineWidth = 2 / zoom;
+          ctx.lineWidth = ((1.2 / zoom) + ((2.2 / zoom) - (1.2 / zoom)) * nodeEmphasis);
           ctx.stroke();
         }
       }
 
       // Label
       if (showLabels && (isHighlighted || zoom > 0.8)) {
-        ctx.globalAlpha = isHighlighted ? 1 : (hasSelection ? 0.15 : 0.7);
+        const baseLabelAlpha = hasSelection ? 0.12 + 0.3 * (1 - focusBlend) : 0.72;
+        ctx.globalAlpha = Math.min(1, baseLabelAlpha + nodeEmphasis * 0.7);
         ctx.fillStyle = "hsl(var(--foreground))";
         const fontSize = node.isFolder ? Math.max(11, 13 / zoom) : Math.max(10, 12 / zoom);
         ctx.font = `${node.isFolder ? 'bold ' : ''}${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
@@ -696,7 +746,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
 
     ctx.restore();
     animationRef.current = requestAnimationFrame(render);
-  }, [params, zoom, pan, hoverNode, selectedNode, currentFile, dimensions, nodeSize, showLabels]);
+  }, [params, zoom, pan, hoverNode, selectedNode, currentFile, dimensions, getNodeBaseRadius, showLabels]);
 
   useEffect(() => {
     animationRef.current = requestAnimationFrame(render);
@@ -734,8 +784,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
     dragStart.current = { x, y };
 
     const clickedNode = nodesRef.current.find((n) => {
-      const baseR = Math.max(4, 5 + Math.log(n.connections + 1) * 4);
-      const r = Math.min(baseR * nodeSize, 25) + 8; // 使用相同的半径计算
+      const r = getNodeBaseRadius(n) + 8;
       return Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < r;
     });
 
@@ -744,10 +793,12 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
       draggedNodeId.current = clickedNode.id;
       clickedNodeRef.current = clickedNode;
       clickedNode.isDragging = true;
+      setHoverPreview(null);
       setSelectedNode(clickedNode);
     } else {
       isDraggingCanvas.current = true;
       clickedNodeRef.current = null;
+      setHoverPreview(null);
       setSelectedNode(null);
     }
   };
@@ -758,7 +809,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
 
     if (!isDraggingNode.current && !isDraggingCanvas.current) {
       const hovered = nodesRef.current.find((n) => {
-        const r = Math.max(4, 5 + n.connections * 1.5) + 5;
+        const r = getNodeBaseRadius(n) + 8;
         return Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < r;
       });
       setHoverNode(hovered ? hovered.id : null);
@@ -823,8 +874,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
 
     // 查找右键点击的节点
     const clickedNode = nodesRef.current.find((n) => {
-      const baseR = Math.max(4, 5 + Math.log(n.connections + 1) * 4);
-      const r = Math.min(baseR * nodeSize, 25) + 8;
+      const r = getNodeBaseRadius(n) + 8;
       return Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < r;
     });
 
@@ -887,6 +937,10 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
       })
       .filter(Boolean) as GraphNode[];
   }, [selectedNode]);
+
+  const hoverPreviewNode = hoverPreview
+    ? nodesRef.current.find((node) => node.id === hoverPreview.nodeId) ?? null
+    : null;
 
   return (
     <div className={`flex h-full ${className}`}>
@@ -1059,7 +1113,11 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
             }}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            onMouseLeave={() => {
+              setHoverNode(null);
+              setHoverPreview(null);
+              handleMouseUp();
+            }}
             onContextMenu={handleContextMenu}
             onDoubleClick={() => {
               if (selectedNode) {
@@ -1068,6 +1126,44 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
             }}
             className="block w-full h-full cursor-crosshair active:cursor-move"
           />
+
+          <div
+            className={cn(
+              "absolute top-3 right-3 z-10 w-72 rounded-xl border border-border/70 bg-background/88 backdrop-blur-md shadow-lg pointer-events-none transition-all duration-200 ease-out",
+              hoverPreviewNode
+                ? "opacity-100 translate-y-0 scale-100"
+                : "opacity-0 translate-y-2 scale-[0.98]"
+            )}
+          >
+            {hoverPreviewNode && (
+              <div className="p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  {hoverPreviewNode.isFolder ? (
+                    <MousePointer2 size={14} className="mt-0.5 text-muted-foreground" />
+                  ) : (
+                    <FileText size={14} className="mt-0.5 text-primary" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {hoverPreviewNode.label}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {hoverPreviewNode.path}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
+                    <LinkIcon size={10} />
+                    {hoverPreviewNode.connections}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
+                    {hoverPreviewNode.isFolder ? "Folder" : "Note"}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* 右键菜单 */}
           {contextMenu && (
