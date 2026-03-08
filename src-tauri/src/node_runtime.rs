@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use futures_util::StreamExt;
@@ -114,6 +115,29 @@ pub fn candidate_node_paths(
     candidates
 }
 
+fn preferred_debug_node_path(
+    node_env: Option<&str>,
+    path_env: Option<&OsStr>,
+    platform: NodePlatform,
+) -> Option<PathBuf> {
+    if let Some(node_env) = node_env {
+        let candidate = PathBuf::from(node_env);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    let path_env = path_env?;
+    for dir in std::env::split_paths(path_env) {
+        let candidate = dir.join(node_binary_name(platform));
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
 pub fn resolve_node_path(
     resource_dir: Option<&Path>,
     app_data_dir: Option<&Path>,
@@ -122,6 +146,16 @@ pub fn resolve_node_path(
     if let Ok(env_path) = std::env::var("LUMINA_NODE_PATH") {
         let candidate = PathBuf::from(env_path);
         if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    if cfg!(debug_assertions) {
+        if let Some(candidate) = preferred_debug_node_path(
+            std::env::var("NODE").ok().as_deref(),
+            std::env::var_os("PATH").as_deref(),
+            platform,
+        ) {
             return Some(candidate);
         }
     }
@@ -309,5 +343,26 @@ mod tests {
         assert!(candidates.contains(&resource.join("node").join("bin").join("node")));
         assert!(candidates.contains(&resource.join("resources").join("node").join("node")));
         assert!(candidates.contains(&app_data.join("codex").join("node").join("node")));
+    }
+
+    #[test]
+    fn preferred_debug_node_uses_node_env_before_path() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let env_node = temp_dir.path().join("env-node");
+        std::fs::write(&env_node, "").unwrap();
+
+        let path_dir = temp_dir.path().join("path");
+        std::fs::create_dir_all(&path_dir).unwrap();
+        let path_node = path_dir.join(node_binary_name(NodePlatform::Macos));
+        std::fs::write(&path_node, "").unwrap();
+
+        let joined_path = std::env::join_paths([path_dir]).unwrap();
+        let resolved = preferred_debug_node_path(
+            Some(env_node.to_str().unwrap()),
+            Some(joined_path.as_os_str()),
+            NodePlatform::Macos,
+        );
+
+        assert_eq!(resolved, Some(env_node));
     }
 }
