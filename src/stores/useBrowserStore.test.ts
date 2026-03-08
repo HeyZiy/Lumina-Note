@@ -1,7 +1,7 @@
 /**
  * useBrowserStore 测试
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({
@@ -9,6 +9,19 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import { useBrowserStore } from './useBrowserStore';
+import { invoke } from '@tauri-apps/api/core';
+
+const invokeMock = vi.mocked(invoke);
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 describe('useBrowserStore', () => {
   beforeEach(() => {
@@ -17,8 +30,15 @@ describe('useBrowserStore', () => {
       instances: new Map(),
       activeTabId: null,
       globalHidden: false,
+      hiddenRequestCount: 0,
     });
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    invokeMock.mockResolvedValue(undefined as never);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('initial state', () => {
@@ -35,6 +55,11 @@ describe('useBrowserStore', () => {
     it('should not be globally hidden', () => {
       const state = useBrowserStore.getState();
       expect(state.globalHidden).toBe(false);
+    });
+
+    it('should start with no hide requests', () => {
+      const state = useBrowserStore.getState();
+      expect(state.hiddenRequestCount).toBe(0);
     });
   });
 
@@ -204,6 +229,93 @@ describe('useBrowserStore', () => {
     it('should return false for non-existent webview', () => {
       const store = useBrowserStore.getState();
       expect(store.isWebViewExists('non-existent')).toBe(false);
+    });
+  });
+
+  describe('global hide/show', () => {
+    it('keeps webviews hidden during modal-to-modal handoff', async () => {
+      const store = useBrowserStore.getState();
+      store.registerWebView('tab-1', 'https://example.com');
+      store.setActiveTab('tab-1');
+
+      await store.hideAllWebViews();
+      const pendingShow = store.showAllWebViews();
+      const pendingHide = store.hideAllWebViews();
+      await vi.runAllTimersAsync();
+      await Promise.all([pendingShow, pendingHide]);
+
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(useBrowserStore.getState().hiddenRequestCount).toBe(1);
+      expect(invokeMock).not.toHaveBeenCalledWith(
+        'set_browser_webview_visible',
+        expect.objectContaining({ visible: true }),
+      );
+    });
+
+    it('waits for every hide request to release before restoring the active webview', async () => {
+      const store = useBrowserStore.getState();
+      store.registerWebView('tab-1', 'https://example.com');
+      store.setActiveTab('tab-1');
+
+      await store.hideAllWebViews();
+      await store.hideAllWebViews();
+      const firstRelease = store.showAllWebViews();
+      await vi.runAllTimersAsync();
+      await firstRelease;
+
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(useBrowserStore.getState().hiddenRequestCount).toBe(1);
+
+      const secondRelease = store.showAllWebViews();
+      await vi.runAllTimersAsync();
+      await secondRelease;
+
+      expect(useBrowserStore.getState().globalHidden).toBe(false);
+      expect(useBrowserStore.getState().hiddenRequestCount).toBe(0);
+      expect(invokeMock).toHaveBeenCalledWith(
+        'set_browser_webview_visible',
+        expect.objectContaining({ tabId: 'tab-1', visible: true }),
+      );
+    });
+
+    it('keeps globalHidden locked while a restore is in flight and a new hide request arrives', async () => {
+      const store = useBrowserStore.getState();
+      store.registerWebView('tab-1', 'https://example.com');
+      store.setActiveTab('tab-1');
+
+      await store.hideAllWebViews();
+
+      const restoreDeferred = createDeferred<void>();
+      invokeMock.mockImplementation(async (_command, payload) => {
+        const args = payload as { visible?: boolean } | undefined;
+        if (args?.visible === true) {
+          await restoreDeferred.promise;
+        }
+        return undefined as never;
+      });
+
+      const pendingShow = store.showAllWebViews();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(invokeMock).toHaveBeenCalledWith(
+        'set_browser_webview_visible',
+        expect.objectContaining({ tabId: 'tab-1', visible: true }),
+      );
+
+      const pendingHide = store.hideAllWebViews();
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(useBrowserStore.getState().hiddenRequestCount).toBe(1);
+
+      restoreDeferred.resolve();
+      await Promise.all([pendingShow, pendingHide]);
+
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(useBrowserStore.getState().hiddenRequestCount).toBe(1);
+      expect(invokeMock).toHaveBeenCalledWith(
+        'set_browser_webview_visible',
+        expect.objectContaining({ tabId: 'tab-1', visible: false }),
+      );
     });
   });
 });

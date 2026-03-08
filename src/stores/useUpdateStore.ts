@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { reportOperationError } from "@/lib/reportError";
 import { retryWithExponentialBackoff } from "@/lib/retry";
+import { isTauriAvailable } from "@/lib/tauri";
 
 export const UPDATE_CHECK_TIMEOUT_MS = 15_000;
 const UPDATE_CHECK_MAX_ATTEMPTS = 3;
@@ -39,6 +40,7 @@ export type UpdateInstallPhase =
   | "cancelled";
 
 export type UpdateDownloadCapability = "unknown" | "supported" | "unsupported";
+export type UpdateCheckResult = "available" | "none" | "unsupported";
 
 export interface UpdateInfo {
   version: string;
@@ -70,6 +72,7 @@ export interface ResumableUpdateEvent extends ResumableUpdateStatus {
 export interface UpdateInstallTelemetry {
   sessionId: number;
   taskId: string | null;
+  version: string | null;
   phase: UpdateInstallPhase;
   attempt: number;
   progress: number;
@@ -90,6 +93,7 @@ export interface UpdateInstallTelemetry {
 const createInitialInstallTelemetry = (): UpdateInstallTelemetry => ({
   sessionId: 0,
   taskId: null,
+  version: null,
   phase: "idle",
   attempt: 0,
   progress: 0,
@@ -107,6 +111,26 @@ const createInitialInstallTelemetry = (): UpdateInstallTelemetry => ({
   capability: "unknown",
 });
 
+const resetInstallTelemetryWithSession = (sessionId: number): UpdateInstallTelemetry => ({
+  ...createInitialInstallTelemetry(),
+  sessionId,
+});
+
+const normalizeTelemetryVersion = (
+  version: Pick<UpdateInstallTelemetry, "version">["version"],
+): string | null => {
+  if (typeof version !== "string") return null;
+  const trimmed = version.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+interface PersistedUpdateState {
+  lastCheckTime?: number;
+  skippedVersions?: string[];
+  checkCooldownHours?: number;
+  installTelemetry?: Partial<UpdateInstallTelemetry> | null;
+}
+
 interface UpdateState {
   // 持久化数据
   lastCheckTime: number;
@@ -115,6 +139,7 @@ interface UpdateState {
   installTelemetry: UpdateInstallTelemetry;
 
   // 运行时状态
+  currentVersion: string | null;
   availableUpdate: UpdateInfo | null;
   updateHandle: Update | null;
   hasUnreadUpdate: boolean;
@@ -125,13 +150,14 @@ interface UpdateState {
   setAvailableUpdate: (update: UpdateInfo | null, handle?: Update | null) => void;
   setHasUnreadUpdate: (hasUnread: boolean) => void;
   setIsChecking: (checking: boolean) => void;
+  setCurrentVersion: (version: string | null) => void;
   skipVersion: (version: string) => void;
   clearSkippedVersion: (version: string) => void;
   setCheckCooldownHours: (hours: number) => void;
   isVersionSkipped: (version: string) => boolean;
   markUpdateAsRead: () => void;
   clearUpdate: () => void;
-  beginInstallTelemetry: () => number;
+  beginInstallTelemetry: (version?: string | null) => number;
   recordInstallStarted: (contentLength?: number) => void;
   recordInstallProgress: (chunkLength: number) => void;
   recordInstallInstalling: () => void;
@@ -146,6 +172,55 @@ interface UpdateState {
 const clampAttempt = (attempt: number | undefined): number => {
   if (!Number.isFinite(attempt)) return 1;
   return Math.max(1, Math.floor(attempt || 1));
+};
+
+export const isTerminalInstallPhase = (phase: UpdateInstallPhase): boolean =>
+  phase === "ready" || phase === "error" || phase === "cancelled";
+
+export const hasActionableTerminalInstallPhase = (
+  telemetry: Pick<UpdateInstallTelemetry, "phase" | "version">,
+  currentVersion: string | null,
+): boolean => {
+  if (!isTerminalInstallPhase(telemetry.phase)) return false;
+  const telemetryVersion = normalizeTelemetryVersion(telemetry.version);
+  if (!telemetryVersion) return false;
+  if (currentVersion && telemetryVersion === currentVersion) {
+    return false;
+  }
+  return true;
+};
+
+const migratePersistedUpdateState = (
+  persistedState: unknown,
+  version: number,
+): PersistedUpdateState => {
+  if (!persistedState || typeof persistedState !== "object") {
+    return (persistedState as PersistedUpdateState | undefined) ?? {};
+  }
+
+  const state = persistedState as PersistedUpdateState;
+  if (version >= 1 || !state.installTelemetry) {
+    return state;
+  }
+
+  const persistedTelemetry = state.installTelemetry;
+  const phase = persistedTelemetry.phase;
+  const sessionId = Number.isFinite(persistedTelemetry.sessionId)
+    ? Number(persistedTelemetry.sessionId)
+    : 0;
+
+  if (
+    phase &&
+    isTerminalInstallPhase(phase as UpdateInstallPhase) &&
+    !normalizeTelemetryVersion(persistedTelemetry.version ?? null)
+  ) {
+    return {
+      ...state,
+      installTelemetry: resetInstallTelemetryWithSession(sessionId),
+    };
+  }
+
+  return state;
 };
 
 const mapStageToPhase = (stage: string | undefined): UpdateInstallPhase => {
@@ -188,6 +263,7 @@ const buildTelemetryFromResumable = (
   return {
     ...prev,
     taskId: payload.taskId || prev.taskId,
+    version: payload.version || prev.version,
     phase,
     attempt: clampAttempt(payload.attempt),
     progress,
@@ -222,6 +298,7 @@ export const useUpdateStore = create<UpdateState>()(
       installTelemetry: createInitialInstallTelemetry(),
 
       // 运行时状态（不持久化）
+      currentVersion: null,
       availableUpdate: null,
       updateHandle: null,
       hasUnreadUpdate: false,
@@ -239,6 +316,17 @@ export const useUpdateStore = create<UpdateState>()(
       setHasUnreadUpdate: (hasUnread) => set({ hasUnreadUpdate: hasUnread }),
 
       setIsChecking: (checking) => set({ isChecking: checking }),
+
+      setCurrentVersion: (version) =>
+        set((state) => ({
+          currentVersion: version,
+          installTelemetry:
+            version &&
+            state.installTelemetry.version === version &&
+            isTerminalInstallPhase(state.installTelemetry.phase)
+              ? resetInstallTelemetryWithSession(state.installTelemetry.sessionId)
+              : state.installTelemetry,
+        })),
 
       skipVersion: (version) =>
         set((state) => ({
@@ -268,7 +356,7 @@ export const useUpdateStore = create<UpdateState>()(
           hasUnreadUpdate: false,
         }),
 
-      beginInstallTelemetry: () => {
+      beginInstallTelemetry: (version = null) => {
         const nextSessionId = get().installTelemetry.sessionId + 1;
         const now = Date.now();
         set({
@@ -276,6 +364,7 @@ export const useUpdateStore = create<UpdateState>()(
             ...createInitialInstallTelemetry(),
             sessionId: nextSessionId,
             phase: "downloading",
+            version,
             attempt: 1,
             startedAt: now,
             updatedAt: now,
@@ -384,22 +473,37 @@ export const useUpdateStore = create<UpdateState>()(
         })),
 
       hydrateResumableStatus: (status) =>
-        set((state) => ({
-          installTelemetry: status
-            ? buildTelemetryFromResumable(state.installTelemetry, status)
-            : state.installTelemetry,
-        })),
+        set((state) => {
+          if (status) {
+            const nextTelemetry = buildTelemetryFromResumable(state.installTelemetry, status);
+            return {
+              installTelemetry:
+                isTerminalInstallPhase(nextTelemetry.phase) &&
+                !hasActionableTerminalInstallPhase(nextTelemetry, state.currentVersion)
+                  ? resetInstallTelemetryWithSession(state.installTelemetry.sessionId)
+                  : nextTelemetry,
+            };
+          }
+
+          return {
+            installTelemetry: hasActionableTerminalInstallPhase(
+              state.installTelemetry,
+              state.currentVersion,
+            )
+              ? state.installTelemetry
+              : resetInstallTelemetryWithSession(state.installTelemetry.sessionId),
+          };
+        }),
 
       resetInstallTelemetry: () =>
         set((state) => ({
-          installTelemetry: {
-            ...createInitialInstallTelemetry(),
-            sessionId: state.installTelemetry.sessionId,
-          },
+          installTelemetry: resetInstallTelemetryWithSession(state.installTelemetry.sessionId),
         })),
     }),
     {
       name: "lumina-update",
+      version: 1,
+      migrate: migratePersistedUpdateState,
       partialize: (state) => ({
         lastCheckTime: state.lastCheckTime,
         skippedVersions: state.skippedVersions,
@@ -483,6 +587,7 @@ export const isResumableUpdaterEnabled = (): boolean => {
 
 export async function initResumableUpdateListeners(): Promise<void> {
   if (!isResumableUpdaterEnabled()) return;
+  if (!isTauriAvailable()) return;
   if (resumableInitPromise) return resumableInitPromise;
 
   resumableInitPromise = (async () => {
@@ -558,17 +663,21 @@ export function shouldCheckForUpdate(): boolean {
  * @param force 强制检查，忽略冷却时间
  * @returns 是否有可用更新
  */
-export async function checkForUpdate(force = false): Promise<boolean> {
+export async function checkForUpdate(force = false): Promise<UpdateCheckResult> {
+  if (!isTauriAvailable()) {
+    return "unsupported";
+  }
+
   const store = useUpdateStore.getState();
 
   // 检查冷却时间
   if (!force && !shouldCheckForUpdate()) {
-    return store.availableUpdate !== null;
+    return store.availableUpdate !== null ? "available" : "none";
   }
 
   // 防止并发检查
   if (store.isChecking) {
-    return false;
+    return store.availableUpdate !== null ? "available" : "none";
   }
 
   store.setIsChecking(true);
@@ -599,7 +708,7 @@ export async function checkForUpdate(force = false): Promise<boolean> {
       // 检查是否被跳过
       if (store.isVersionSkipped(version)) {
         store.setAvailableUpdate(null);
-        return false;
+        return "none";
       }
 
       const updateInfo: UpdateInfo = {
@@ -609,11 +718,11 @@ export async function checkForUpdate(force = false): Promise<boolean> {
       };
 
       store.setAvailableUpdate(updateInfo, updateResult);
-      return true;
+      return "available";
     }
 
     store.setAvailableUpdate(null);
-    return false;
+    return "none";
   } catch (err) {
     reportOperationError({
       source: "useUpdateStore.checkForUpdate",
@@ -621,7 +730,7 @@ export async function checkForUpdate(force = false): Promise<boolean> {
       error: err,
       level: "warning",
     });
-    return false;
+    throw err;
   } finally {
     store.setIsChecking(false);
   }
@@ -632,13 +741,19 @@ export async function checkForUpdate(force = false): Promise<boolean> {
  * 应在 App 启动时调用，会延迟执行以避免影响启动性能
  */
 export function initAutoUpdateCheck(delayMs = 5000): void {
+  if (!isTauriAvailable()) return;
+
   setTimeout(async () => {
-    const hasUpdate = await checkForUpdate();
-    if (hasUpdate) {
-      console.log(
-        "[Update] New version available:",
-        useUpdateStore.getState().availableUpdate?.version,
-      );
+    try {
+      const result = await checkForUpdate();
+      if (result === "available") {
+        console.log(
+          "[Update] New version available:",
+          useUpdateStore.getState().availableUpdate?.version,
+        );
+      }
+    } catch {
+      // checkForUpdate already reports the failure
     }
   }, delayMs);
 }

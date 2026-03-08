@@ -5,6 +5,7 @@ import { useLocaleStore } from "@/stores/useLocaleStore";
 import {
     useUpdateStore,
     checkForUpdate,
+    hasActionableTerminalInstallPhase,
     getUpdateHandle,
     initResumableUpdateListeners,
     isResumableUpdaterEnabled,
@@ -33,6 +34,7 @@ export function UpdateChecker() {
         hasUnreadUpdate,
         isChecking,
         skippedVersions,
+        currentVersion,
         skipVersion,
         clearSkippedVersion,
         markUpdateAsRead,
@@ -46,10 +48,21 @@ export function UpdateChecker() {
         recordInstallError,
     } = useUpdateStore();
 
-    const [checkStatus, setCheckStatus] = useState<"idle" | "up-to-date" | "error">("idle");
+    const [checkStatus, setCheckStatus] = useState<"idle" | "up-to-date" | "error" | "unsupported">("idle");
     const [checkError, setCheckError] = useState<string | null>(null);
 
-    const status = installTelemetry.phase !== "idle" ? installTelemetry.phase : checkStatus;
+    const hasUpdate = availableUpdate !== null;
+    const hasActiveInstallPhase =
+        installTelemetry.phase === "downloading" ||
+        installTelemetry.phase === "verifying" ||
+        installTelemetry.phase === "installing";
+    const hasActionableTerminalPhase = hasActionableTerminalInstallPhase(
+        installTelemetry,
+        currentVersion,
+    );
+    const effectiveInstallPhase =
+        hasActiveInstallPhase || hasActionableTerminalPhase ? installTelemetry.phase : "idle";
+    const status = effectiveInstallPhase !== "idle" ? effectiveInstallPhase : checkStatus;
     const error = status === "error" ? installTelemetry.error || checkError : checkError;
     const progress = installTelemetry.progress;
     const downloadedSize =
@@ -59,7 +72,7 @@ export function UpdateChecker() {
                 : `${(installTelemetry.downloadedBytes / 1024 / 1024).toFixed(1)} MB`
             : "";
 
-    // 打开设置时标记更新为已读
+    // 打开更新窗口时标记更新为已读
     useEffect(() => {
         if (hasUnreadUpdate) {
             markUpdateAsRead();
@@ -78,9 +91,11 @@ export function UpdateChecker() {
         setCheckStatus("idle");
 
         try {
-            const hasUpdate = await checkForUpdate(true); // force check
-            if (!hasUpdate) {
+            const result = await checkForUpdate(true); // force check
+            if (result === "none") {
                 setCheckStatus("up-to-date");
+            } else if (result === "unsupported") {
+                setCheckStatus("unsupported");
             }
         } catch (err) {
             reportOperationError({
@@ -98,7 +113,7 @@ export function UpdateChecker() {
         const updateHandle = getUpdateHandle();
         if (!updateHandle) return;
 
-        const sessionId = beginInstallTelemetry();
+        const sessionId = beginInstallTelemetry(availableUpdate?.version);
 
         try {
             console.info("[Update] Install flow started", { sessionId });
@@ -186,9 +201,19 @@ export function UpdateChecker() {
     };
 
     const handleRelaunch = async () => {
+        const previousTelemetry = installTelemetry;
         try {
+            useUpdateStore.setState({
+                installTelemetry: {
+                    ...installTelemetry,
+                    phase: "idle",
+                    error: null,
+                    errorCode: null,
+                },
+            });
             await relaunch();
         } catch (err) {
+            useUpdateStore.setState({ installTelemetry: previousTelemetry });
             reportOperationError({
                 source: "UpdateChecker.handleRelaunch",
                 action: "Relaunch app after update",
@@ -197,8 +222,6 @@ export function UpdateChecker() {
             setCheckError(err instanceof Error ? err.message : String(err));
         }
     };
-
-    const hasUpdate = availableUpdate !== null;
 
     return (
         <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-border/50">
@@ -215,11 +238,13 @@ export function UpdateChecker() {
                         {status === "ready" && t.updateChecker.descReady}
                         {status === "cancelled" && t.updateChecker.descCancelled}
                         {status === "error" && t.updateChecker.descError}
+                        {status === "unsupported" && t.updateChecker.descUnsupported}
                     </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {(status === "idle" || status === "up-to-date") && !hasUpdate && (
+                    {(status === "idle" || status === "up-to-date" || status === "error" || status === "cancelled") &&
+                        !hasUpdate && (
                         <button
                             onClick={handleCheckForUpdates}
                             disabled={isChecking}
@@ -234,7 +259,7 @@ export function UpdateChecker() {
                         </button>
                     )}
 
-                    {status === "idle" && hasUpdate && (
+                    {(status === "idle" || status === "error" || status === "cancelled") && hasUpdate && (
                         <>
                             <button
                                 onClick={handleSkipVersion}
@@ -309,7 +334,7 @@ export function UpdateChecker() {
             )}
 
             {/* 观测信息（用于排查设置页关闭后的下载状态） */}
-            {installTelemetry.phase !== "idle" && (
+            {effectiveInstallPhase !== "idle" && (
                 <div className="text-xs text-muted-foreground bg-background/50 p-3 rounded-lg border border-border/50 space-y-1">
                     <p className="font-medium text-foreground/80">Update telemetry</p>
                     <p>
