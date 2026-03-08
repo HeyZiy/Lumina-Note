@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-03-08
+
+### 新功能
+- 软件更新流程迁移到独立更新窗口，并在 Ribbon 增加轻量更新入口
+
+### 修复
+- 修复更新器终态遥测残留导致的旧状态误显示问题
+- 修复设置弹窗与更新弹窗切换时浏览器 WebView 显隐竞争问题
+
 ## [1.0.2] - 2026-03-07
 
 ### 修复
