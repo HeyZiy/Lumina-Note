@@ -75,6 +75,7 @@ let lifecycleTimer: ReturnType<typeof setInterval> | null = null;
 let visibilitySyncChain: Promise<void> = Promise.resolve();
 let pendingShowTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingShowResolve: (() => void) | null = null;
+let visibilityRequestVersion = 0;
 
 const clearPendingShowTimer = () => {
   if (pendingShowTimer) {
@@ -370,6 +371,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
   // 隐藏所有 WebView（用于模态框打开时）
   hideAllWebViews: async () => {
     clearPendingShowTimer();
+    visibilityRequestVersion += 1;
     set((state) => ({
       hiddenRequestCount: state.hiddenRequestCount + 1,
     }));
@@ -402,6 +404,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
   
   // 显示所有 WebView（用于模态框关闭时）
   showAllWebViews: async () => {
+    visibilityRequestVersion += 1;
+    const restoreVersion = visibilityRequestVersion;
     const nextCount = Math.max(0, get().hiddenRequestCount - 1);
     set({ hiddenRequestCount: nextCount });
     if (nextCount > 0) return;
@@ -415,26 +419,49 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
         pendingShowResolve = null;
         visibilitySyncChain = visibilitySyncChain.then(async () => {
           const { instances, activeTabId, globalHidden, hiddenRequestCount } = get();
-          if (hiddenRequestCount > 0 || !globalHidden) return;
+          if (hiddenRequestCount > 0 || !globalHidden || restoreVersion !== visibilityRequestVersion) {
+            return;
+          }
 
-          set({ globalHidden: false });
+          const activeInstance = activeTabId ? instances.get(activeTabId) : null;
+          const shouldRestoreActiveWebView = Boolean(activeTabId && (!activeInstance || activeInstance.webviewExists));
 
-          if (activeTabId) {
-            const instance = instances.get(activeTabId);
-            if (!instance || instance.webviewExists) {
+          if (shouldRestoreActiveWebView && activeTabId) {
+            try {
+              await invoke('set_browser_webview_visible', { tabId: activeTabId, visible: true });
+            } catch (err) {
+              reportOperationError({
+                source: "BrowserStore.showAllWebViews",
+                action: "Restore active browser webview visibility",
+                error: err,
+                level: "warning",
+                context: { tabId: activeTabId },
+              });
+            }
+          }
+
+          const latestState = get();
+          if (
+            latestState.hiddenRequestCount > 0 ||
+            restoreVersion !== visibilityRequestVersion
+          ) {
+            if (shouldRestoreActiveWebView && activeTabId) {
               try {
-                await invoke('set_browser_webview_visible', { tabId: activeTabId, visible: true });
+                await invoke('set_browser_webview_visible', { tabId: activeTabId, visible: false });
               } catch (err) {
                 reportOperationError({
                   source: "BrowserStore.showAllWebViews",
-                  action: "Restore active browser webview visibility",
+                  action: "Rollback active browser webview visibility",
                   error: err,
                   level: "warning",
                   context: { tabId: activeTabId },
                 });
               }
             }
+            return;
           }
+
+          set({ globalHidden: false });
           console.log('[BrowserStore] 已恢复 WebView 显示');
         }).finally(resolve);
       }, 0);

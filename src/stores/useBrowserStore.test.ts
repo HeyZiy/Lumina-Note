@@ -13,6 +13,16 @@ import { invoke } from '@tauri-apps/api/core';
 
 const invokeMock = vi.mocked(invoke);
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('useBrowserStore', () => {
   beforeEach(() => {
     // Reset store to initial state
@@ -265,6 +275,46 @@ describe('useBrowserStore', () => {
       expect(invokeMock).toHaveBeenCalledWith(
         'set_browser_webview_visible',
         expect.objectContaining({ tabId: 'tab-1', visible: true }),
+      );
+    });
+
+    it('keeps globalHidden locked while a restore is in flight and a new hide request arrives', async () => {
+      const store = useBrowserStore.getState();
+      store.registerWebView('tab-1', 'https://example.com');
+      store.setActiveTab('tab-1');
+
+      await store.hideAllWebViews();
+
+      const restoreDeferred = createDeferred<void>();
+      invokeMock.mockImplementation(async (_command, payload) => {
+        const args = payload as { visible?: boolean } | undefined;
+        if (args?.visible === true) {
+          await restoreDeferred.promise;
+        }
+        return undefined as never;
+      });
+
+      const pendingShow = store.showAllWebViews();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(invokeMock).toHaveBeenCalledWith(
+        'set_browser_webview_visible',
+        expect.objectContaining({ tabId: 'tab-1', visible: true }),
+      );
+
+      const pendingHide = store.hideAllWebViews();
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(useBrowserStore.getState().hiddenRequestCount).toBe(1);
+
+      restoreDeferred.resolve();
+      await Promise.all([pendingShow, pendingHide]);
+
+      expect(useBrowserStore.getState().globalHidden).toBe(true);
+      expect(useBrowserStore.getState().hiddenRequestCount).toBe(1);
+      expect(invokeMock).toHaveBeenCalledWith(
+        'set_browser_webview_visible',
+        expect.objectContaining({ tabId: 'tab-1', visible: false }),
       );
     });
   });
