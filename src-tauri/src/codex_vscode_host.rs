@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 static HOST_SCRIPT: &str = include_str!("../../scripts/codex-vscode-host/host.mjs");
 
-use crate::node_runtime::{current_platform, download_node_runtime, resolve_node_path};
+use crate::node_runtime::{current_platform, ensure_node_runtime_with_env_proxy};
 
 #[derive(Default)]
 struct CodexVscodeHostInner {
@@ -145,22 +145,20 @@ pub async fn codex_vscode_host_start(
     let script_path = host_script_path(&app)?;
 
     let resource_dir = app.path().resource_dir().ok();
-    let app_data_dir = app.path().app_data_dir().ok();
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::InvalidPath(format!("Failed to get app_data_dir: {}", e)))?;
     let platform = current_platform();
-    let mut cmd =
-        match resolve_node_path(resource_dir.as_deref(), app_data_dir.as_deref(), platform) {
-            Some(path) => Command::new(path),
-            None => {
-                let app_data_dir = app.path().app_data_dir().map_err(|e| {
-                    AppError::InvalidPath(format!("Failed to get app_data_dir: {}", e))
-                })?;
-                let downloaded = download_node_runtime(&app_data_dir)
-                    .await
-                    .map_err(AppError::InvalidPath)?;
-                Command::new(downloaded)
-            }
-        };
+    let node_path =
+        ensure_node_runtime_with_env_proxy(resource_dir.as_deref(), &app_data_dir, platform)
+            .await
+            .map_err(AppError::InvalidPath)?;
+
+    let mut cmd = Command::new(node_path);
     apply_no_window_flag(&mut cmd);
+    cmd.kill_on_drop(true);
+    cmd.env("NODE_USE_ENV_PROXY", "1");
     cmd.arg(script_path)
         .arg("--extensionPath")
         .arg(extension_path)

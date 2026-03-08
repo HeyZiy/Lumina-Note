@@ -288,6 +288,196 @@ function withErrorBoundary(fn) {
   };
 }
 
+const MAX_RUNTIME_ISSUES = 8;
+const RUNTIME_ISSUE_DEDUPE_WINDOW_MS = 2500;
+const MAX_DEBUG_EVENTS = 80;
+const DEBUG_EVENT_DEDUPE_WINDOW_MS = 1000;
+
+function isThreadStreamBroadcastEvent(event) {
+  const summary = event?.summary;
+  return (
+    event?.category === "webviewMessage" &&
+    event?.direction === "host->webview" &&
+    summary?.type === "ipc-broadcast" &&
+    summary?.method === "thread-stream-state-changed"
+  );
+}
+
+function truncateDebugString(value, maxLength = 180) {
+  const text = String(value ?? "");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}…`;
+}
+
+function summarizeDebugValue(value, depth = 0) {
+  if (value == null || typeof value === "boolean" || typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return truncateDebugString(value);
+  }
+
+  if (typeof value === "bigint") {
+    return `${value}n`;
+  }
+
+  if (typeof value === "function") {
+    return `[Function ${value.name || "anonymous"}]`;
+  }
+
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: truncateDebugString(value.message),
+      stack: value.stack ? truncateDebugString(value.stack, 320) : null,
+    };
+  }
+
+  if (Array.isArray(value)) {
+    if (depth >= 3) {
+      return `[Array(${value.length})]`;
+    }
+    return {
+      type: "array",
+      length: value.length,
+      items: value.slice(0, 4).map((item) => summarizeDebugValue(item, depth + 1)),
+    };
+  }
+
+  if (typeof value === "object") {
+    if (depth >= 3) {
+      const objectType = value?.constructor?.name;
+      return objectType && objectType !== "Object" ? `[${objectType}]` : "[Object]";
+    }
+
+    const entries = Object.entries(value).slice(0, 12);
+    const summary = {};
+    for (const [key, entryValue] of entries) {
+      summary[key] = summarizeDebugValue(entryValue, depth + 1);
+    }
+    const remainingKeys = Object.keys(value).length - entries.length;
+    if (remainingKeys > 0) {
+      summary.__remainingKeys = remainingKeys;
+    }
+    return summary;
+  }
+
+  return truncateDebugString(value);
+}
+
+function buildDebugEventSignature(event) {
+  if (isThreadStreamBroadcastEvent(event)) {
+    return JSON.stringify([
+      event.category ?? "",
+      event.direction ?? "",
+      event.viewType ?? "",
+      "ipc-broadcast",
+      "thread-stream-state-changed",
+    ]);
+  }
+  return JSON.stringify([
+    event.category ?? "",
+    event.direction ?? "",
+    event.viewType ?? "",
+    event.level ?? "",
+    event.summary ?? null,
+  ]);
+}
+
+function toSerializableDebugEvent(event) {
+  if (!event) return null;
+  const { signature: _signature, ...rest } = event;
+  return rest;
+}
+
+function recordDebugEvent(state, event) {
+  const now = Date.now();
+  const signature = buildDebugEventSignature(event);
+  const dedupeWindowMs = isThreadStreamBroadcastEvent(event) ? Number.POSITIVE_INFINITY : DEBUG_EVENT_DEDUPE_WINDOW_MS;
+  const existing = state.debugEvents.find(
+    (item) => item.signature === signature && now - item.lastSeenAt <= dedupeWindowMs,
+  );
+  if (existing) {
+    existing.count += 1;
+    existing.lastSeenAt = now;
+    existing.summary = event.summary;
+    return existing;
+  }
+
+  const next = {
+    id: state.nextDebugEventId++,
+    createdAt: now,
+    lastSeenAt: now,
+    count: 1,
+    signature,
+    ...event,
+  };
+  state.debugEvents = [next, ...state.debugEvents].slice(0, MAX_DEBUG_EVENTS);
+  return next;
+}
+
+function buildRuntimeIssueSignature(issue) {
+  return JSON.stringify([
+    issue.viewType ?? "",
+    issue.kind ?? "",
+    issue.message ?? "",
+    issue.detail ?? null,
+  ]);
+}
+
+function recordRuntimeIssue(state, issue) {
+  const now = Date.now();
+  const signature = buildRuntimeIssueSignature(issue);
+  const existing = state.runtimeIssues.find(
+    (item) => item.signature === signature && now - item.lastSeenAt <= RUNTIME_ISSUE_DEDUPE_WINDOW_MS,
+  );
+
+  if (existing) {
+    existing.count += 1;
+    existing.lastSeenAt = now;
+    return existing;
+  }
+
+  const next = {
+    id: state.nextRuntimeIssueId++,
+    viewType: issue.viewType,
+    kind: issue.kind,
+    message: issue.message,
+    detail: issue.detail ?? null,
+    createdAt: now,
+    lastSeenAt: now,
+    count: 1,
+    signature,
+  };
+
+  state.runtimeIssues = [next, ...state.runtimeIssues].slice(0, MAX_RUNTIME_ISSUES);
+  recordDebugEvent(state, {
+    category: "runtimeIssue",
+    summary: {
+      viewType: next.viewType,
+      kind: next.kind,
+      message: next.message,
+      detail: summarizeDebugValue(next.detail),
+    },
+  });
+  return next;
+}
+
+function toSerializableRuntimeIssue(issue) {
+  if (!issue) return null;
+  return {
+    id: issue.id,
+    viewType: issue.viewType,
+    kind: issue.kind,
+    message: issue.message,
+    detail: issue.detail,
+    createdAt: issue.createdAt,
+    lastSeenAt: issue.lastSeenAt,
+    count: issue.count,
+  };
+}
+
 function injectAcquireVsCodeApi(html, { origin, viewType, token }) {
   const src = `${origin}/vscode/api.js?viewType=${encodeURIComponent(viewType)}&token=${encodeURIComponent(token)}`;
   const apiScript = `<script src="${src}"></script>`;
@@ -295,6 +485,75 @@ function injectAcquireVsCodeApi(html, { origin, viewType, token }) {
   if (html.includes("<head>")) return html.replace("<head>", `<head>${apiScript}`);
   if (html.includes("<head ")) return html.replace(/<head[^>]*>/, (m) => `${m}${apiScript}`);
   return `${apiScript}\n${html}`;
+}
+
+function injectLuminaRuntimeBridge(html) {
+  const script = `<script>
+(() => {
+  const report = async (payload) => {
+    try {
+      if (typeof window.acquireVsCodeApi !== "function") return;
+      const vscode = window.acquireVsCodeApi();
+      if (!vscode?.postMessage) return;
+      await vscode.postMessage({ type: "__luminaRuntimeIssue", payload });
+    } catch {
+      // ignore
+    }
+  };
+
+  window.addEventListener("securitypolicyviolation", (event) => {
+    void report({
+      kind: "securitypolicyviolation",
+      message: "Content Security Policy blocked a Codex webview resource.",
+      detail: {
+        effectiveDirective: event.effectiveDirective || null,
+        violatedDirective: event.violatedDirective || null,
+        blockedURI: event.blockedURI || null,
+        sourceFile: event.sourceFile || null,
+        lineNumber: event.lineNumber || null,
+        columnNumber: event.columnNumber || null,
+      },
+    });
+  });
+
+  window.addEventListener("error", (event) => {
+    const message = event.message || "Uncaught error in Codex webview";
+    void report({
+      kind: "error",
+      message,
+      detail: {
+        sourceFile: event.filename || null,
+        lineNumber: event.lineno || null,
+        columnNumber: event.colno || null,
+      },
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason;
+    const message =
+      reason instanceof Error
+        ? reason.message
+        : typeof reason === "string"
+          ? reason
+          : "Unhandled promise rejection in Codex webview";
+    void report({
+      kind: "unhandledrejection",
+      message,
+      detail: {
+        reason:
+          reason instanceof Error
+            ? { message: reason.message, stack: reason.stack || null }
+            : reason ?? null,
+      },
+    });
+  });
+})();
+</script>`;
+
+  if (html.includes("<head>")) return html.replace("<head>", `<head>${script}`);
+  if (html.includes("<head ")) return html.replace(/<head[^>]*>/, (m) => `${m}${script}`);
+  return `${script}\n${html}`;
 }
 
 function injectTheme(html, theme) {
@@ -356,6 +615,52 @@ body {
   return `${style}\n${html}`;
 }
 
+function ensureDirectiveSources(policy, directiveName, nextSources) {
+  const directives = String(policy ?? "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const normalizedDirectiveName = directiveName.toLowerCase();
+  let found = false;
+
+  const rewritten = directives.map((directive) => {
+    const parts = directive.split(/\s+/).filter(Boolean);
+    if ((parts[0] ?? "").toLowerCase() !== normalizedDirectiveName) {
+      return directive;
+    }
+    found = true;
+    const merged = new Set(parts.slice(1));
+    for (const source of nextSources) merged.add(source);
+    return [parts[0], ...merged].join(" ");
+  });
+
+  if (!found) {
+    rewritten.push([directiveName, ...nextSources].join(" "));
+  }
+
+  return rewritten.join("; ");
+}
+
+function injectCspFontDataCompatibility(html, origin) {
+  return html.replace(/<meta\b[^>]*>/gi, (tag) => {
+    if (!/http-equiv\s*=\s*(["'])Content-Security-Policy\1/i.test(tag)) {
+      return tag;
+    }
+
+    const contentMatch = tag.match(/content\s*=\s*(["'])([\s\S]*?)\1/i);
+    if (!contentMatch) {
+      return tag;
+    }
+
+    const quote = contentMatch[1];
+    const content = contentMatch[2];
+    let nextPolicy = ensureDirectiveSources(content, "font-src", [origin, "data:"]);
+    nextPolicy = ensureDirectiveSources(nextPolicy, "script-src", [origin, "'unsafe-eval'"]);
+    nextPolicy = ensureDirectiveSources(nextPolicy, "connect-src", [origin]);
+    return tag.replace(contentMatch[0], `content=${quote}${nextPolicy}${quote}`);
+  });
+}
+
 function createAcquireVsCodeApiJs({ origin, viewType, token }) {
   return `
 (() => {
@@ -386,7 +691,7 @@ function createAcquireVsCodeApiJs({ origin, viewType, token }) {
         const { cursor: next, messages } = await poll(cursor);
         cursor = next ?? cursor;
         for (const msg of messages ?? []) {
-          window.dispatchEvent(new MessageEvent("message", { data: msg }));
+          window.postMessage(msg, window.location.origin);
         }
       } catch {
         // ignore
@@ -439,7 +744,38 @@ async function main() {
     workspacePath,
     theme: "dark",
     activeDocument: null, // { path, languageId, content, version }
+    runtimeIssues: [],
+    nextRuntimeIssueId: 1,
+    debugEvents: [],
+    nextDebugEventId: 1,
   };
+
+  const originalFetch = globalThis.fetch?.bind(globalThis);
+  if (originalFetch) {
+    globalThis.fetch = async (...args) => {
+      try {
+        return await originalFetch(...args);
+      } catch (error) {
+        recordDebugEvent(state, {
+          category: "network",
+          level: "error",
+          summary: {
+            input: summarizeDebugValue(args[0]),
+            init: summarizeDebugValue(args[1]),
+            error:
+              error instanceof Error
+                ? {
+                    name: error.name,
+                    message: error.message,
+                    cause: summarizeDebugValue(error.cause),
+                  }
+                : summarizeDebugValue(error),
+          },
+        });
+        throw error;
+      }
+    };
+  }
 
   const server = http.createServer(
     withErrorBoundary(async (req, res) => {
@@ -451,6 +787,7 @@ async function main() {
       const u = new URL(req.url ?? "/", "http://127.0.0.1");
 
       if (u.pathname === "/health") {
+        const latestRuntimeIssue = state.runtimeIssues[0] ?? null;
         return json(res, 200, {
           ok: state.activateError == null,
           activateError: state.activateError,
@@ -469,11 +806,23 @@ async function main() {
                 version: state.activeDocument.version ?? 1,
               }
             : null,
+          latestRuntimeIssue: toSerializableRuntimeIssue(latestRuntimeIssue),
+          debugEventCount: state.debugEvents.length,
         });
       }
 
       if (u.pathname === "/debug/registered") {
         return json(res, 200, { viewTypes: [...state.viewProviders.keys()] });
+      }
+
+      if (u.pathname === "/debug/traffic") {
+        return json(res, 200, { events: state.debugEvents.map((event) => toSerializableDebugEvent(event)) });
+      }
+
+      if (u.pathname === "/debug/traffic/reset" && req.method === "POST") {
+        state.debugEvents = [];
+        state.nextDebugEventId = 1;
+        return json(res, 200, { ok: true });
       }
 
       if (u.pathname === "/vscode/api.js" && req.method === "GET") {
@@ -555,8 +904,10 @@ async function main() {
 
         const theme = u.searchParams.get("theme") || state.theme;
         const raw = entry.webview.html;
-        const withApi = injectAcquireVsCodeApi(raw, { origin: `http://127.0.0.1:${server.address().port}`, viewType, token });
-        const withBase = injectBaseLayout(withApi);
+        const withCsp = injectCspFontDataCompatibility(raw, `http://127.0.0.1:${server.address().port}`);
+        const withApi = injectAcquireVsCodeApi(withCsp, { origin: `http://127.0.0.1:${server.address().port}`, viewType, token });
+        const withRuntimeBridge = injectLuminaRuntimeBridge(withApi);
+        const withBase = injectBaseLayout(withRuntimeBridge);
         const html = injectTheme(withBase, theme);
         res.statusCode = 200;
         res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -571,6 +922,21 @@ async function main() {
         const entry = state.views.get(viewType);
         if (!entry) return json(res, 404, { ok: false, error: "unknown viewType" });
         if (entry.token !== token) return json(res, 403, { ok: false, error: "bad token" });
+        recordDebugEvent(state, {
+          category: "webviewMessage",
+          direction: "webview->host",
+          viewType,
+          summary: summarizeDebugValue(message),
+        });
+        if (message?.type === "__luminaRuntimeIssue" && message.payload && typeof message.payload === "object") {
+          recordRuntimeIssue(state, {
+            viewType,
+            kind: String(message.payload.kind ?? "runtime"),
+            message: String(message.payload.message ?? "Codex webview reported a runtime issue"),
+            detail: message.payload.detail ?? null,
+          });
+          return json(res, 200, { ok: true });
+        }
         entry.webview._deliverFromClient(message);
         return json(res, 200, { ok: true });
       }
@@ -583,6 +949,17 @@ async function main() {
         if (!entry) return json(res, 404, { ok: false, error: "unknown viewType" });
         if (entry.token !== token) return json(res, 403, { ok: false, error: "bad token" });
         const { nextCursor, messages } = entry.queue.drain(cursor);
+        recordDebugEvent(state, {
+          category: "poll",
+          direction: "webview->host",
+          viewType,
+          summary: {
+            cursor,
+            nextCursor,
+            messageCount: messages.length,
+            messageTypes: messages.slice(0, 8).map((message) => message?.type ?? typeof message),
+          },
+        });
         return json(res, 200, { cursor: nextCursor, messages });
       }
 
@@ -770,6 +1147,10 @@ function createVscodeApi(state, originForApi) {
       async openExternal(uri) {
         const url = uri?.toString?.() ?? uri;
         logger.info("openExternal", url);
+        recordDebugEvent(state, {
+          category: "openExternal",
+          summary: { url: summarizeDebugValue(url) },
+        });
         return openExternalUrl(url);
       },
     },
@@ -781,12 +1162,32 @@ function createVscodeApi(state, originForApi) {
     commands: {
       registerCommand(command, callback) {
         state.commands.set(command, callback);
+        recordDebugEvent(state, {
+          category: "commandRegistration",
+          summary: { command },
+        });
         return new Disposable(() => state.commands.delete(command));
       },
       async executeCommand(command, ...args) {
         const cb = state.commands.get(command);
+        recordDebugEvent(state, {
+          category: "command",
+          summary: {
+            command,
+            handled: Boolean(cb),
+            args: summarizeDebugValue(args),
+          },
+        });
         if (!cb) return undefined;
-        return await cb(...args);
+        const result = await cb(...args);
+        recordDebugEvent(state, {
+          category: "commandResult",
+          summary: {
+            command,
+            result: summarizeDebugValue(result),
+          },
+        });
+        return result;
       },
     },
     extensions: {
@@ -932,6 +1333,10 @@ function createVscodeApi(state, originForApi) {
       },
       registerWebviewViewProvider(viewType, provider) {
         state.viewProviders.set(viewType, provider);
+        recordDebugEvent(state, {
+          category: "viewProviderRegistration",
+          summary: { viewType },
+        });
         return new Disposable(() => state.viewProviders.delete(viewType));
       },
       createOutputChannel(name) {
@@ -952,12 +1357,27 @@ function createVscodeApi(state, originForApi) {
       },
       showInformationMessage(message) {
         logger.info("info", message);
+        recordDebugEvent(state, {
+          category: "notification",
+          level: "info",
+          summary: { message: summarizeDebugValue(message) },
+        });
       },
       showWarningMessage(message) {
         logger.warn("warn", message);
+        recordDebugEvent(state, {
+          category: "notification",
+          level: "warning",
+          summary: { message: summarizeDebugValue(message) },
+        });
       },
       showErrorMessage(message) {
         logger.error("error", message);
+        recordDebugEvent(state, {
+          category: "notification",
+          level: "error",
+          summary: { message: summarizeDebugValue(message) },
+        });
       },
     },
     ColorThemeKind,
@@ -995,6 +1415,10 @@ async function ensureView({ state, viewType, token, origin }) {
   if (state.views.has(viewType)) {
     const existing = state.views.get(viewType);
     existing.token = token;
+    recordDebugEvent(state, {
+      category: "viewLifecycle",
+      summary: { viewType, event: "reuse" },
+    });
     return existing;
   }
 
@@ -1011,15 +1435,31 @@ async function ensureView({ state, viewType, token, origin }) {
 
   const queue = createQueue();
   const webview = new Webview({
-    postMessageSink: (msg) => queue.push(msg),
+    postMessageSink: (msg) => {
+      recordDebugEvent(state, {
+        category: "webviewMessage",
+        direction: "host->webview",
+        viewType,
+        summary: summarizeDebugValue(msg),
+      });
+      queue.push(msg);
+    },
     asWebviewUri,
     cspSource: origin,
   });
 
   const view = new WebviewView(webview);
   const cancellationToken = { isCancellationRequested: false };
+  recordDebugEvent(state, {
+    category: "viewLifecycle",
+    summary: { viewType, event: "resolve:start" },
+  });
 
   await provider.resolveWebviewView?.(view, {}, cancellationToken);
+  recordDebugEvent(state, {
+    category: "viewLifecycle",
+    summary: { viewType, event: "resolve:done", htmlLength: view.webview.html.length },
+  });
 
   const entry = { webview, view, queue, token };
   state.views.set(viewType, entry);

@@ -1,5 +1,8 @@
+use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use futures_util::future::BoxFuture;
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
@@ -19,6 +22,40 @@ pub enum NodeArch {
 
 pub fn node_runtime_version() -> &'static str {
     include_str!("../../node-runtime-version.txt").trim()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct NodeSemver {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+fn parse_node_semver(raw: &str) -> Option<NodeSemver> {
+    let normalized = raw.trim().trim_start_matches('v');
+    let mut parts = normalized.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    Some(NodeSemver {
+        major,
+        minor,
+        patch,
+    })
+}
+
+pub fn minimum_env_proxy_node_version() -> &'static str {
+    "22.21.0"
+}
+
+pub fn node_version_supports_env_proxy(version: &str) -> bool {
+    let Some(parsed) = parse_node_semver(version) else {
+        return false;
+    };
+    let min_lts = parse_node_semver(minimum_env_proxy_node_version()).expect("valid LTS minimum");
+    let min_current = parse_node_semver("24.0.0").expect("valid current minimum");
+
+    (parsed.major == min_lts.major && parsed >= min_lts) || parsed >= min_current
 }
 
 pub fn platform_tag(platform: NodePlatform) -> &'static str {
@@ -114,25 +151,150 @@ pub fn candidate_node_paths(
     candidates
 }
 
-pub fn resolve_node_path(
-    resource_dir: Option<&Path>,
-    app_data_dir: Option<&Path>,
+fn preferred_debug_node_path(
+    node_env: Option<&str>,
+    path_env: Option<&OsStr>,
     platform: NodePlatform,
 ) -> Option<PathBuf> {
-    if let Ok(env_path) = std::env::var("LUMINA_NODE_PATH") {
-        let candidate = PathBuf::from(env_path);
+    if let Some(node_env) = node_env {
+        let candidate = PathBuf::from(node_env);
         if candidate.is_file() {
             return Some(candidate);
         }
     }
 
-    for candidate in candidate_node_paths(resource_dir, app_data_dir, platform) {
+    let path_env = path_env?;
+    for dir in std::env::split_paths(path_env) {
+        let candidate = dir.join(node_binary_name(platform));
         if candidate.is_file() {
             return Some(candidate);
         }
     }
 
     None
+}
+
+fn prioritized_node_candidates_from_env(
+    resource_dir: Option<&Path>,
+    app_data_dir: Option<&Path>,
+    platform: NodePlatform,
+    lumina_node_path: Option<&str>,
+    node_env: Option<&str>,
+    path_env: Option<&OsStr>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let mut seen = HashSet::new();
+
+    let mut push_candidate = |candidate: PathBuf| {
+        if candidate.is_file() && seen.insert(candidate.clone()) {
+            candidates.push(candidate);
+        }
+    };
+
+    if let Some(env_path) = lumina_node_path {
+        push_candidate(PathBuf::from(env_path));
+    }
+
+    if cfg!(debug_assertions) {
+        if let Some(candidate) = preferred_debug_node_path(node_env, path_env, platform) {
+            push_candidate(candidate);
+        }
+    }
+
+    for candidate in candidate_node_paths(resource_dir, app_data_dir, platform) {
+        push_candidate(candidate);
+    }
+
+    candidates
+}
+
+fn prioritized_node_candidates(
+    resource_dir: Option<&Path>,
+    app_data_dir: Option<&Path>,
+    platform: NodePlatform,
+) -> Vec<PathBuf> {
+    let lumina_node_path = std::env::var("LUMINA_NODE_PATH").ok();
+    let node_env = std::env::var("NODE").ok();
+    let path_env = std::env::var_os("PATH");
+    prioritized_node_candidates_from_env(
+        resource_dir,
+        app_data_dir,
+        platform,
+        lumina_node_path.as_deref(),
+        node_env.as_deref(),
+        path_env.as_deref(),
+    )
+}
+
+pub fn resolve_node_path(
+    resource_dir: Option<&Path>,
+    app_data_dir: Option<&Path>,
+    platform: NodePlatform,
+) -> Option<PathBuf> {
+    prioritized_node_candidates(resource_dir, app_data_dir, platform)
+        .into_iter()
+        .next()
+}
+
+async fn ensure_node_runtime_with_env_proxy_using<SupportsFn, DownloadFn>(
+    resource_dir: Option<&Path>,
+    app_data_dir: &Path,
+    platform: NodePlatform,
+    lumina_node_path: Option<&str>,
+    node_env: Option<&str>,
+    path_env: Option<&OsStr>,
+    supports_env_proxy: SupportsFn,
+    download_runtime: DownloadFn,
+) -> Result<PathBuf, String>
+where
+    SupportsFn: for<'a> Fn(&'a Path) -> BoxFuture<'a, Result<bool, String>>,
+    DownloadFn: for<'a> Fn(&'a Path) -> BoxFuture<'a, Result<PathBuf, String>>,
+{
+    for candidate in prioritized_node_candidates_from_env(
+        resource_dir,
+        Some(app_data_dir),
+        platform,
+        lumina_node_path,
+        node_env,
+        path_env,
+    ) {
+        match supports_env_proxy(&candidate).await {
+            Ok(true) => return Ok(candidate),
+            Ok(false) | Err(_) => continue,
+        }
+    }
+
+    let downloaded = download_runtime(app_data_dir).await?;
+    if supports_env_proxy(&downloaded).await? {
+        return Ok(downloaded);
+    }
+
+    Err(format!(
+        "Bundled Codex runtime is incompatible. Lumina Note needs Node {} or newer for Codex networking.",
+        minimum_env_proxy_node_version()
+    ))
+}
+
+pub async fn ensure_node_runtime_with_env_proxy(
+    resource_dir: Option<&Path>,
+    app_data_dir: &Path,
+    platform: NodePlatform,
+) -> Result<PathBuf, String> {
+    let lumina_node_path = std::env::var("LUMINA_NODE_PATH").ok();
+    let node_env = std::env::var("NODE").ok();
+    let path_env = std::env::var_os("PATH");
+
+    ensure_node_runtime_with_env_proxy_using(
+        resource_dir,
+        app_data_dir,
+        platform,
+        lumina_node_path.as_deref(),
+        node_env.as_deref(),
+        path_env.as_deref(),
+        |path| Box::pin(node_binary_supports_env_proxy(path)),
+        |path| Box::pin(download_node_runtime(path)),
+    )
+    .await
 }
 
 pub async fn download_node_runtime(app_data_dir: &Path) -> Result<PathBuf, String> {
@@ -277,26 +439,51 @@ pub async fn download_node_runtime(app_data_dir: &Path) -> Result<PathBuf, Strin
     Ok(binary_target)
 }
 
+pub async fn node_binary_supports_env_proxy(path: &Path) -> Result<bool, String> {
+    let output = tokio::process::Command::new(path)
+        .arg("--version")
+        .output()
+        .await
+        .map_err(|e| format!("Failed to inspect Node runtime version: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to inspect Node runtime version: exited with {}",
+            output.status
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let detected = if stdout.trim().is_empty() {
+        stderr.trim()
+    } else {
+        stdout.trim()
+    };
+
+    Ok(node_version_supports_env_proxy(detected))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn builds_archive_name_and_url() {
-        let name = node_archive_name("20.11.1", NodePlatform::Macos, NodeArch::Arm64).unwrap();
-        assert_eq!(name, "node-v20.11.1-darwin-arm64.tar.xz");
+        let name = node_archive_name("22.21.0", NodePlatform::Macos, NodeArch::Arm64).unwrap();
+        assert_eq!(name, "node-v22.21.0-darwin-arm64.tar.xz");
 
-        let url = node_archive_url("20.11.1", NodePlatform::Windows, NodeArch::X64).unwrap();
+        let url = node_archive_url("22.21.0", NodePlatform::Windows, NodeArch::X64).unwrap();
         assert_eq!(
             url,
-            "https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip"
+            "https://nodejs.org/dist/v22.21.0/node-v22.21.0-win-x64.zip"
         );
     }
 
     #[test]
     fn builds_extracted_dir() {
-        let dir = node_extracted_dir("20.11.1", NodePlatform::Linux, NodeArch::X64);
-        assert_eq!(dir, "node-v20.11.1-linux-x64");
+        let dir = node_extracted_dir("22.21.0", NodePlatform::Linux, NodeArch::X64);
+        assert_eq!(dir, "node-v22.21.0-linux-x64");
     }
 
     #[test]
@@ -309,5 +496,90 @@ mod tests {
         assert!(candidates.contains(&resource.join("node").join("bin").join("node")));
         assert!(candidates.contains(&resource.join("resources").join("node").join("node")));
         assert!(candidates.contains(&app_data.join("codex").join("node").join("node")));
+    }
+
+    #[test]
+    fn preferred_debug_node_uses_node_env_before_path() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let env_node = temp_dir.path().join("env-node");
+        std::fs::write(&env_node, "").unwrap();
+
+        let path_dir = temp_dir.path().join("path");
+        std::fs::create_dir_all(&path_dir).unwrap();
+        let path_node = path_dir.join(node_binary_name(NodePlatform::Macos));
+        std::fs::write(&path_node, "").unwrap();
+
+        let joined_path = std::env::join_paths([path_dir]).unwrap();
+        let resolved = preferred_debug_node_path(
+            Some(env_node.to_str().unwrap()),
+            Some(joined_path.as_os_str()),
+            NodePlatform::Macos,
+        );
+
+        assert_eq!(resolved, Some(env_node));
+    }
+
+    #[test]
+    fn node_version_supports_env_proxy_for_supported_ranges() {
+        assert!(!node_version_supports_env_proxy("20.11.1"));
+        assert!(!node_version_supports_env_proxy("22.20.0"));
+        assert!(node_version_supports_env_proxy("22.21.0"));
+        assert!(node_version_supports_env_proxy("24.0.0"));
+    }
+
+    #[test]
+    fn bundled_runtime_version_meets_proxy_minimum() {
+        assert!(node_version_supports_env_proxy(node_runtime_version()));
+    }
+
+    #[tokio::test]
+    async fn ensure_runtime_reuses_cached_compatible_node_before_downloading() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let platform = current_platform();
+
+        let path_dir = temp_dir.path().join("path");
+        std::fs::create_dir_all(&path_dir).unwrap();
+        let path_node = path_dir.join(node_binary_name(platform));
+        std::fs::write(&path_node, "").unwrap();
+
+        let cached_node = temp_dir
+            .path()
+            .join("codex")
+            .join("node")
+            .join(node_binary_name(platform));
+        std::fs::create_dir_all(cached_node.parent().unwrap()).unwrap();
+        std::fs::write(&cached_node, "").unwrap();
+
+        let joined_path = std::env::join_paths([path_dir]).unwrap();
+        let download_calls = Arc::new(AtomicUsize::new(0));
+        let download_calls_clone = Arc::clone(&download_calls);
+
+        let resolved = ensure_node_runtime_with_env_proxy_using(
+            None,
+            temp_dir.path(),
+            platform,
+            None,
+            None,
+            Some(joined_path.as_os_str()),
+            |path| {
+                let is_cached_node = path == cached_node.as_path();
+                Box::pin(async move { Ok(is_cached_node) })
+            },
+            move |_| {
+                let download_calls = Arc::clone(&download_calls_clone);
+                Box::pin(async move {
+                    download_calls.fetch_add(1, Ordering::SeqCst);
+                    Err("download should not be called".to_string())
+                })
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resolved, cached_node);
+        assert_eq!(download_calls.load(Ordering::SeqCst), 0);
     }
 }

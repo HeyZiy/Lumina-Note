@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 function startHost(extensionPath: string, workspacePath?: string) {
@@ -133,6 +135,157 @@ describe("codex-vscode-host", () => {
     const { origin } = await host.ready;
     const html = await fetch(`${origin}/view/${encodeURIComponent("hello.view")}?token=t`).then((r) => r.text());
     expect(html).toContain("data-lumina-webview-base");
+  });
+
+  it("adds compatibility sources to extension CSP without broadening unrelated directives", async () => {
+    const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), "lumina-csp-ext-"));
+    fs.writeFileSync(
+      path.join(extensionPath, "package.json"),
+      JSON.stringify({ name: "csp-ext", version: "0.0.0", main: "./extension.js" }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(extensionPath, "extension.js"),
+      `"use strict";
+exports.activate = async function activate() {
+  const vscode = require("vscode");
+  vscode.window.registerWebviewViewProvider("csp.view", {
+    resolveWebviewView(view) {
+      view.webview.html = \`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; font-src \${view.webview.cspSource}; script-src \${view.webview.cspSource};"></head><body>CSP</body></html>\`;
+    },
+  });
+};`,
+      "utf8",
+    );
+
+    const host = startHost(extensionPath);
+    running.push(host);
+
+    const { origin } = await host.ready;
+    const html = await fetch(`${origin}/view/${encodeURIComponent("csp.view")}?token=t`).then((r) => r.text());
+
+    expect(html).toContain(`font-src ${origin} data:`);
+    expect(html).toContain(`script-src ${origin} 'unsafe-eval'`);
+    expect(html).toContain(`connect-src ${origin}`);
+    expect(html).toContain(`img-src https:`);
+  });
+
+  it("injects the VS Code bridge scripts before a strict meta CSP", async () => {
+    const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), "lumina-csp-order-ext-"));
+    fs.writeFileSync(
+      path.join(extensionPath, "package.json"),
+      JSON.stringify({ name: "csp-order-ext", version: "0.0.0", main: "./extension.js" }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(extensionPath, "extension.js"),
+      `"use strict";
+exports.activate = async function activate() {
+  const vscode = require("vscode");
+  vscode.window.registerWebviewViewProvider("csp.order.view", {
+    resolveWebviewView(view) {
+      view.webview.html = \`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src \${view.webview.cspSource};"></head><body>Order</body></html>\`;
+    },
+  });
+};`,
+      "utf8",
+    );
+
+    const host = startHost(extensionPath);
+    running.push(host);
+
+    const { origin } = await host.ready;
+    const html = await fetch(`${origin}/view/${encodeURIComponent("csp.order.view")}?token=t`).then((r) => r.text());
+
+    const headStart = html.indexOf("<head>");
+    const metaIndex = html.indexOf('<meta http-equiv="Content-Security-Policy"');
+    const apiScriptIndex = html.indexOf(`<script src="${origin}/vscode/api.js?viewType=csp.order.view&token=t"></script>`);
+    const runtimeBridgeIndex = html.indexOf("__luminaRuntimeIssue");
+
+    expect(headStart).toBeGreaterThanOrEqual(0);
+    expect(metaIndex).toBeGreaterThan(headStart);
+    expect(apiScriptIndex).toBeGreaterThan(headStart);
+    expect(runtimeBridgeIndex).toBeGreaterThan(headStart);
+    expect(apiScriptIndex).toBeLessThan(metaIndex);
+    expect(runtimeBridgeIndex).toBeLessThan(metaIndex);
+  });
+
+  it("records runtime issues reported by the webview bridge in health", async () => {
+    const extensionPath = path.resolve("scripts/codex-vscode-host/fixtures/hello-ext");
+    const host = startHost(extensionPath);
+    running.push(host);
+
+    const { origin } = await host.ready;
+    const token = "runtime-token";
+    await fetch(`${origin}/view/${encodeURIComponent("hello.view")}?token=${token}`).then((r) => r.text());
+
+    const report = await fetch(`${origin}/vscode/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        viewType: "hello.view",
+        token,
+        message: {
+          type: "__luminaRuntimeIssue",
+          payload: {
+            kind: "securitypolicyviolation",
+            message: "Content Security Policy blocked a Codex webview resource.",
+            detail: {
+              effectiveDirective: "font-src",
+              blockedURI: "data:font/woff2;base64,abc",
+            },
+          },
+        },
+      }),
+    }).then((r) => r.json());
+
+    expect(report.ok).toBe(true);
+
+    const health = await fetch(`${origin}/health`).then((r) => r.json());
+    expect(health.latestRuntimeIssue).toMatchObject({
+      viewType: "hello.view",
+      kind: "securitypolicyviolation",
+      message: "Content Security Policy blocked a Codex webview resource.",
+    });
+    expect(health.latestRuntimeIssue.detail).toMatchObject({
+      effectiveDirective: "font-src",
+      blockedURI: "data:font/woff2;base64,abc",
+    });
+  });
+
+  it("exposes recent webview traffic in the debug endpoint", async () => {
+    const extensionPath = path.resolve("scripts/codex-vscode-host/fixtures/hello-ext");
+    const host = startHost(extensionPath);
+    running.push(host);
+
+    const { origin } = await host.ready;
+    const token = "debug-token";
+    await fetch(`${origin}/view/${encodeURIComponent("hello.view")}?token=${token}`).then((r) => r.text());
+
+    await fetch(`${origin}/vscode/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viewType: "hello.view", token, message: { type: "ping", payload: { nested: "value" } } }),
+    }).then((r) => r.json());
+
+    const traffic = await fetch(`${origin}/debug/traffic`).then((r) => r.json());
+    expect(Array.isArray(traffic.events)).toBe(true);
+    expect(traffic.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "webviewMessage",
+          direction: "webview->host",
+          viewType: "hello.view",
+          summary: expect.objectContaining({ type: "ping" }),
+        }),
+      ]),
+    );
+
+    const reset = await fetch(`${origin}/debug/traffic/reset`, { method: "POST" }).then((r) => r.json());
+    expect(reset).toEqual({ ok: true });
+
+    const clearedTraffic = await fetch(`${origin}/debug/traffic`).then((r) => r.json());
+    expect(clearedTraffic.events).toEqual([]);
   });
 
   it("reflects active document in health and fires without crashing", async () => {
