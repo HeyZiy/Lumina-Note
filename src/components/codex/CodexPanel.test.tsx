@@ -315,4 +315,63 @@ describe("CodexPanel", () => {
 
     expect(screen.getByText("Codex blocked data:font/woff2;base64,abc because of font-src.")).toBeTruthy();
   });
+
+  it("shows actionable guidance when the Codex extension download fails", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "codex_extension_get_status") {
+        return Promise.resolve({
+          installed: false,
+          version: null,
+          extensionPath: null,
+          latestVersion: null,
+        });
+      }
+      if (cmd === "codex_extension_install_latest") {
+        return Promise.reject(new Error("Network error: VSIX download failed: 503 Service Unavailable"));
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<CodexPanel visible workspacePath="C:\\\\workspace" renderMode="native" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Lumina Note couldn't download the Codex extension automatically. Check your network connection, or import a VSIX manually.",
+        ),
+      ).toBeTruthy();
+    });
+
+    expect(screen.getByRole("button", { name: /download & install/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /import vsix/i })).toBeTruthy();
+  });
+
+  it("shows actionable guidance when the built-in Codex runtime cannot start", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "codex_extension_get_status") {
+        return Promise.resolve({
+          installed: true,
+          version: "0.5.60",
+          extensionPath: "C:\\\\ext",
+          latestVersion: "0.5.60",
+        });
+      }
+      if (cmd === "codex_vscode_host_start") {
+        return Promise.reject(
+          new Error("Invalid path: Node runtime not found. Bundle node with the app or set LUMINA_NODE_PATH."),
+        );
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<CodexPanel visible workspacePath="C:\\\\workspace" renderMode="native" />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Lumina Note couldn't start the built-in Codex runtime. Retry in a moment, or update Lumina Note if the problem keeps happening.",
+        ),
+      ).toBeTruthy();
+    });
+  });
 });

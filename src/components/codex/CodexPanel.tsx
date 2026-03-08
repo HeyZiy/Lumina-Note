@@ -6,7 +6,7 @@ import { Loader2, Download, RefreshCw, ExternalLink, Code2 } from "lucide-react"
 import { CodexEmbeddedWebview } from "@/components/codex/CodexEmbeddedWebview";
 import { useUIStore } from "@/stores/useUIStore";
 import { useFileStore } from "@/stores/useFileStore";
-import { reportOperationError } from "@/lib/reportError";
+import { normalizeErrorMessage, reportOperationError } from "@/lib/reportError";
 
 type HostInfo = {
   origin: string;
@@ -93,6 +93,44 @@ function formatCodexRuntimeIssue(issue: HostRuntimeIssue): string {
   return issue.message;
 }
 
+function formatCodexUserError(action: string, rawError: unknown): string {
+  const message = normalizeErrorMessage(rawError);
+  const normalized = message.toLowerCase();
+
+  const isNetworkFailure =
+    normalized.includes("network error") ||
+    normalized.includes("marketplace") ||
+    normalized.includes("vsix download failed") ||
+    normalized.includes("timed out") ||
+    normalized.includes("connecttimeout") ||
+    normalized.includes("connection");
+
+  if (
+    action.includes("Install") &&
+    isNetworkFailure
+  ) {
+    return "Lumina Note couldn't download the Codex extension automatically. Check your network connection, or import a VSIX manually.";
+  }
+
+  if (
+    normalized.includes("node runtime not found") ||
+    normalized.includes("failed to download node runtime") ||
+    normalized.includes("checksum mismatch") ||
+    normalized.includes("incompatible") && normalized.includes("runtime")
+  ) {
+    return "Lumina Note couldn't start the built-in Codex runtime. Retry in a moment, or update Lumina Note if the problem keeps happening.";
+  }
+
+  if (
+    normalized.includes("timed out waiting for codex host ready") ||
+    normalized.includes("did not become ready")
+  ) {
+    return "Codex took too long to start. Retry once, and if it still hangs, copy the error details and report the issue.";
+  }
+
+  return message;
+}
+
 async function waitForCodexViewReady(
   origin: string,
   viewType: string,
@@ -157,12 +195,13 @@ export function CodexPanel({ visible, workspacePath, renderMode = "native" }: Pr
   const token = useMemo(() => crypto.randomUUID(), []);
 
   const reportCodexPanelError = (action: string, rawError: unknown, context?: Record<string, unknown>) => {
-    const message = rawError instanceof Error ? rawError.message : String(rawError);
+    const message = formatCodexUserError(action, rawError);
     setError(message);
     reportOperationError({
       source: "CodexPanel",
       action,
       error: rawError,
+      userMessage: message,
       context,
     });
   };
