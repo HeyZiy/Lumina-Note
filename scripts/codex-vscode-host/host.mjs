@@ -749,6 +749,33 @@ async function main() {
     nextDebugEventId: 1,
   };
 
+  const originalFetch = globalThis.fetch?.bind(globalThis);
+  if (originalFetch) {
+    globalThis.fetch = async (...args) => {
+      try {
+        return await originalFetch(...args);
+      } catch (error) {
+        recordDebugEvent(state, {
+          category: "network",
+          level: "error",
+          summary: {
+            input: summarizeDebugValue(args[0]),
+            init: summarizeDebugValue(args[1]),
+            error:
+              error instanceof Error
+                ? {
+                    name: error.name,
+                    message: error.message,
+                    cause: summarizeDebugValue(error.cause),
+                  }
+                : summarizeDebugValue(error),
+          },
+        });
+        throw error;
+      }
+    };
+  }
+
   const server = http.createServer(
     withErrorBoundary(async (req, res) => {
       setCors(res);
