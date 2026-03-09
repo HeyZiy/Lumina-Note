@@ -283,7 +283,7 @@ export function TabBar() {
   return (
     <>
       <div
-        className="flex min-h-[32px] items-stretch border-b border-border/60 bg-background/55 backdrop-blur-md shadow-[0_1px_0_hsl(var(--border)/0.5)]"
+        className="flex h-11 items-stretch border-b border-border/60 bg-background/55 backdrop-blur-md shadow-[0_1px_0_hsl(var(--border)/0.5)]"
         data-tauri-drag-region={showMacTopActions ? true : undefined}
       >
         <div

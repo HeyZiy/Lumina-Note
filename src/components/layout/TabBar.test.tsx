@@ -101,4 +101,13 @@ describe("TabBar", () => {
     expect(screen.getByTestId("mac-tabbar-top-actions")).toHaveAttribute("data-tauri-drag-region", "false");
     expect(screen.queryByTestId("mac-tabbar-drag-strip")).not.toBeInTheDocument();
   });
+
+  it("matches the macOS left top bar height at 44px", () => {
+    macTopChromeEnabled.value = true;
+
+    const { container } = render(<TabBar />);
+
+    expect(container.firstElementChild).toHaveClass("h-11");
+    expect(container.firstElementChild).not.toHaveClass("min-h-[32px]");
+  });
 });
