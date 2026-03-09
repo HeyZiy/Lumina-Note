@@ -704,6 +704,11 @@ export function Sidebar() {
     setSelectedPath(vaultPath);
   }, [vaultPath]);
 
+  const handleSelectRoot = useCallback(() => {
+    if (!vaultPath) return;
+    setSelectedPath(vaultPath);
+  }, [vaultPath]);
+
   const markFileTreeScrollActive = useCallback(() => {
     setIsFileTreeScrollActive(true);
     if (fileTreeScrollFadeTimerRef.current !== null) {
@@ -967,6 +972,7 @@ export function Sidebar() {
       {/* Vault Name - 也是根目录放置区 */}
       <div 
         data-folder-path={vaultPath}
+        onClick={handleSelectRoot}
         onMouseEnter={() => {
           const dragData = getDragData();
           if (dragData?.isDragging) {
@@ -975,7 +981,7 @@ export function Sidebar() {
         }}
         onMouseLeave={() => setIsRootDragOver(false)}
         className={cn(
-          "px-3 py-2 text-sm font-medium truncate border-b border-border/60 bg-background/35 transition-colors",
+          "cursor-pointer px-3 py-2 text-sm font-medium truncate border-b border-border/60 bg-background/35 transition-colors hover:bg-background/45",
           isRootDragOver && "bg-primary/15 ring-1 ring-primary/40 ring-inset",
           selectedPath === vaultPath && "bg-primary/10 ring-1 ring-primary/30 ring-inset text-primary"
         )}
