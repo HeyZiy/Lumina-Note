@@ -47,6 +47,11 @@ interface ContextMenuState {
   isDirectory: boolean;
 }
 
+interface RootContextMenuState {
+  x: number;
+  y: number;
+}
+
 // 新建模式状态
 interface CreatingState {
   type: "file" | "folder" | "diagram";
@@ -179,6 +184,7 @@ export function Sidebar() {
   
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [rootContextMenu, setRootContextMenu] = useState<RootContextMenuState | null>(null);
   // More menu state
   const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
   // 选中状态（用于确定新建位置）
@@ -253,9 +259,21 @@ export function Sidebar() {
     });
   }, []);
 
+  const handleRootContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!vaultPath) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedPath(vaultPath);
+    setRootContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }, [vaultPath]);
+
   // Close context menu
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
+    setRootContextMenu(null);
     setMoreMenu(null);
   }, []);
 
@@ -335,6 +353,13 @@ export function Sidebar() {
     setRenameValue(baseName);
   }, []);
 
+  const handleStartRootRename = useCallback(() => {
+    if (!vaultPath) return;
+    setSelectedPath(vaultPath);
+    setRenamingPath(vaultPath);
+    setRenameValue(vaultPath.split(/[/\\]/).pop() || "Notes");
+  }, [vaultPath]);
+
   const handleRename = useCallback(async () => {
     if (!renamingPath || !renameValue.trim()) {
       setRenamingPath(null);
@@ -342,12 +367,15 @@ export function Sidebar() {
     }
 
     const trimmed = renameValue.trim();
-    const isDir = !renamingPath.toLowerCase().endsWith(".md");
     const separator = renamingPath.includes("\\") ? "\\" : "/";
     const parentDir = renamingPath.substring(0, renamingPath.lastIndexOf(separator));
-    const newPath = isDir
+    const isRootRename = renamingPath === vaultPath;
+    const isDir = isRootRename || !renamingPath.toLowerCase().endsWith(".md");
+    const newPath = isRootRename
       ? `${parentDir}${separator}${trimmed}`
-      : `${parentDir}${separator}${trimmed}.md`;
+      : isDir
+        ? `${parentDir}${separator}${trimmed}`
+        : `${parentDir}${separator}${trimmed}.md`;
     
     if (newPath === renamingPath) {
       setRenamingPath(null);
@@ -356,23 +384,76 @@ export function Sidebar() {
     
     try {
       await renameFile(renamingPath, newPath);
-      await refreshFileTree();
-      
-      // 更新标签页中的路径和名称（如果文件在标签页中打开）
-      const { updateTabPath } = useFileStore.getState();
-      updateTabPath(renamingPath, newPath);
+      if (isRootRename) {
+        const normalize = (path: string) => path.replace(/\\/g, "/");
+        const replaceFolderPrefix = (path: string) => {
+          const normalizedPath = normalize(path);
+          const normalizedSource = normalize(renamingPath);
+          const normalizedTarget = normalize(newPath);
+          if (normalizedPath === normalizedSource || normalizedPath.startsWith(normalizedSource + "/")) {
+            return normalizedTarget + normalizedPath.slice(normalizedSource.length);
+          }
+          return path;
+        };
 
-      const { useDatabaseStore } = await import("@/stores/useDatabaseStore");
-      if (isDir) {
-        const dbIds = Object.keys(useDatabaseStore.getState().databases);
+        const { tabs, currentFile, setVaultPath } = useFileStore.getState();
+        const updatedTabs = tabs.map((tab) => {
+          if (
+            tab.type === "file" ||
+            tab.type === "typesetting-doc" ||
+            tab.type === "diagram" ||
+            tab.type === "pdf"
+          ) {
+            const nextPath = replaceFolderPrefix(tab.path);
+            if (nextPath !== tab.path) {
+              const nextName =
+                tab.type === "file" || tab.type === "typesetting-doc"
+                  ? nextPath.split(/[/\\]/).pop()?.replace(/\.(md|docx)$/i, "") || tab.name
+                  : tab.name;
+              const nextId =
+                tab.type === "diagram"
+                  ? `__diagram_${nextPath}__`
+                  : tab.type === "pdf"
+                    ? `__pdf_${nextPath}__`
+                    : nextPath;
+              return {
+                ...tab,
+                path: nextPath,
+                name: nextName,
+                id: nextId,
+              };
+            }
+          }
+          return tab;
+        });
+
+        useFileStore.setState({
+          tabs: updatedTabs,
+          currentFile: currentFile ? replaceFolderPrefix(currentFile) : currentFile,
+        });
+        useFavoriteStore.getState().updatePathsForFolderMove(renamingPath, newPath);
+        await setVaultPath(newPath);
+        setSelectedPath((currentSelectedPath) => {
+          if (!currentSelectedPath) return newPath;
+          return replaceFolderPrefix(currentSelectedPath);
+        });
+        const databaseStoreModule = await import("@/stores/useDatabaseStore");
+        const dbIds = Object.keys(databaseStoreModule.useDatabaseStore.getState().databases);
         for (const dbId of dbIds) {
-          await useDatabaseStore.getState().refreshRows(dbId);
+          await databaseStoreModule.useDatabaseStore.getState().refreshRows(dbId);
         }
       } else {
+        await refreshFileTree();
+        
+        // 更新标签页中的路径和名称（如果文件在标签页中打开）
+        const { updateTabPath } = useFileStore.getState();
+        updateTabPath(renamingPath, newPath);
+
         const content = await readFile(newPath);
         const { frontmatter, hasFrontmatter } = parseFrontmatter(content);
         if (hasFrontmatter && frontmatter.db) {
-          await useDatabaseStore.getState().refreshRows(String(frontmatter.db));
+          const databaseStoreModule = await import("@/stores/useDatabaseStore");
+          await databaseStoreModule.useDatabaseStore.getState().refreshRows(String(frontmatter.db));
         }
       }
     } catch (error) {
@@ -385,7 +466,7 @@ export function Sidebar() {
       });
     }
     setRenamingPath(null);
-  }, [renamingPath, renameValue, refreshFileTree, t.file.renameFailed]);
+  }, [renamingPath, renameValue, refreshFileTree, t.file.renameFailed, vaultPath]);
 
   // Handle copy path
   const handleCopyPath = useCallback(async (path: string) => {
@@ -709,6 +790,15 @@ export function Sidebar() {
     setSelectedPath(vaultPath);
   }, [vaultPath]);
 
+  const getRootContextMenuItems = useCallback((): MenuItem[] => {
+    if (!vaultPath) return [];
+    return [
+      menuItems.rename(handleStartRootRename),
+      menuItems.copyPath(() => handleCopyPath(vaultPath)),
+      menuItems.showInExplorer(() => handleShowInExplorer(vaultPath)),
+    ];
+  }, [handleCopyPath, handleShowInExplorer, handleStartRootRename, vaultPath]);
+
   const markFileTreeScrollActive = useCallback(() => {
     setIsFileTreeScrollActive(true);
     if (fileTreeScrollFadeTimerRef.current !== null) {
@@ -970,24 +1060,56 @@ export function Sidebar() {
       </div>
 
       {/* Vault Name - 也是根目录放置区 */}
-      <div 
-        data-folder-path={vaultPath}
-        onClick={handleSelectRoot}
-        onMouseEnter={() => {
-          const dragData = getDragData();
-          if (dragData?.isDragging) {
-            setIsRootDragOver(true);
-          }
-        }}
-        onMouseLeave={() => setIsRootDragOver(false)}
-        className={cn(
-          "cursor-pointer px-3 py-2 text-sm font-medium truncate border-b border-border/60 bg-background/35 transition-colors hover:bg-background/45",
-          isRootDragOver && "bg-primary/15 ring-1 ring-primary/40 ring-inset",
-          selectedPath === vaultPath && "bg-primary/10 ring-1 ring-primary/30 ring-inset text-primary"
-        )}
-      >
-        {vaultPath?.split(/[/\\]/).pop() || "Notes"}
-      </div>
+      {renamingPath === vaultPath ? (
+        <div className="border-b border-border/60 bg-background/35 px-2 py-1.5">
+          <input
+            type="text"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={() => {
+              void handleRename();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleRename();
+              } else if (e.key === "Escape") {
+                setRenamingPath(null);
+              }
+            }}
+            autoFocus
+            className="ui-input h-8 w-full border-primary/60 px-2"
+          />
+        </div>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          data-folder-path={vaultPath}
+          onClick={handleSelectRoot}
+          onContextMenu={handleRootContextMenu}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === "F2") && selectedPath === vaultPath) {
+              e.preventDefault();
+              handleStartRootRename();
+            }
+          }}
+          onMouseEnter={() => {
+            const dragData = getDragData();
+            if (dragData?.isDragging) {
+              setIsRootDragOver(true);
+            }
+          }}
+          onMouseLeave={() => setIsRootDragOver(false)}
+          className={cn(
+            "cursor-pointer select-none px-3 py-2 text-sm font-medium truncate border-b border-border/60 bg-background/35 transition-colors hover:bg-background/45",
+            isRootDragOver && "bg-primary/15 ring-1 ring-primary/40 ring-inset",
+            selectedPath === vaultPath && "bg-primary/10 ring-1 ring-primary/30 ring-inset text-primary"
+          )}
+        >
+          {vaultPath?.split(/[/\\]/).pop() || "Notes"}
+        </div>
+      )}
 
       {/* File Tree */}
       <div
@@ -1048,6 +1170,15 @@ export function Sidebar() {
           x={contextMenu.x}
           y={contextMenu.y}
           items={getContextMenuItems(contextMenu.entry)}
+          onClose={closeContextMenu}
+        />
+      )}
+
+      {rootContextMenu && (
+        <ContextMenu
+          x={rootContextMenu.x}
+          y={rootContextMenu.y}
+          items={getRootContextMenuItems()}
           onClose={closeContextMenu}
         />
       )}
