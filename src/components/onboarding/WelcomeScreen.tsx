@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { FolderOpen, Sparkles } from "lucide-react";
 import { TitleBar } from "@/components/layout/TitleBar";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
+import { MacTopChrome, useMacTopChromeEnabled } from "@/components/layout/MacTopChrome";
 import { Button } from "@/components/ui/button";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 
@@ -11,13 +12,19 @@ interface WelcomeScreenProps {
 
 export function WelcomeScreen({ onOpenVault }: WelcomeScreenProps) {
   const { t } = useLocaleStore();
+  const showMacTopChrome = useMacTopChromeEnabled();
 
   return (
     <div className="h-full flex flex-col bg-background">
       <TitleBar />
+      <MacTopChrome
+        title="Lumina Note"
+        subtitle={t.welcome.subtitle}
+        actions={<LanguageSwitcher compact showLabel={false} stopPropagation />}
+      />
 
       <div className="relative flex-1 ui-app-bg overflow-hidden">
-        <LanguageSwitcher className="absolute top-4 right-4 z-10" />
+        {!showMacTopChrome && <LanguageSwitcher className="absolute top-4 right-4 z-10" />}
 
         <div className="h-full flex items-center justify-center px-6 py-10">
           <motion.div

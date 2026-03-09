@@ -14,7 +14,7 @@ import { useFileStore } from "@/stores/useFileStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useNoteIndexStore } from "@/stores/useNoteIndexStore";
 import { useRAGStore } from "@/stores/useRAGStore";
-import { PanelRight } from "lucide-react";
+import { Command, FolderOpen, PanelRight, Search } from "lucide-react";
 import { CommandPalette, PaletteMode } from "@/components/search/CommandPalette";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { TabBar } from "@/components/layout/TabBar";
@@ -36,6 +36,7 @@ import { useLocaleStore } from "@/stores/useLocaleStore";
 import { getDragData, clearDragData } from "@/lib/dragState";
 import { saveFile, startFileWatcher } from "@/lib/tauri";
 import { TitleBar } from "@/components/layout/TitleBar";
+import { MacTopChrome } from "@/components/layout/MacTopChrome";
 import { VoiceInputBall } from "@/components/ai/VoiceInputBall";
 import { enableDebugLogger, disableDebugLogger } from "@/lib/debugLogger";
 import { AgentEvalPanel } from "@/tests/agent-eval/AgentEvalPanel";
@@ -250,6 +251,7 @@ function App() {
 
   // Get active tab
   const activeTab = activeTabIndex >= 0 ? tabs[activeTabIndex] : null;
+  const macTopChromeTitle = activeTab?.webpageTitle || activeTab?.name || currentFile || "Lumina Note";
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>("command");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -854,6 +856,37 @@ function App() {
   return (
     <div className="h-full flex flex-col bg-background ui-app-bg">
       <TitleBar />
+      <MacTopChrome
+        title={macTopChromeTitle}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="h-8 w-8 ui-icon-btn bg-background/40 hover:bg-accent/60"
+              title={t.overview.commandPalette}
+            >
+              <Command className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="h-8 w-8 ui-icon-btn bg-background/40 hover:bg-accent/60"
+              title={t.globalSearch.title}
+            >
+              <Search className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleOpenVault()}
+              className="h-8 w-8 ui-icon-btn bg-background/40 hover:bg-accent/60"
+              title={t.welcome.openFolder}
+            >
+              <FolderOpen className="h-4 w-4" />
+            </button>
+          </>
+        }
+      />
       <PluginShellSlotHost slotId="app-top" />
       <div ref={layoutRef} className="flex-1 flex overflow-hidden transition-colors duration-300">
         {/* Left Ribbon (Icon Bar) */}
