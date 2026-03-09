@@ -18,7 +18,8 @@ export function TitleBar() {
   const { t } = useLocaleStore();
   const tauriRuntime = isTauri();
   const [isMaximized, setIsMaximized] = useState(false);
-  const [isMac, setIsMac] = useState(() => (tauriRuntime ? false : isMacByNavigator()));
+  const [isMac, setIsMac] = useState(() => isMacByNavigator());
+  const usesNativeMacTitleBar = tauriRuntime && isMac;
 
   const getWindowSafe = useCallback((): Window | null => {
     if (!tauriRuntime) return null;
@@ -130,7 +131,18 @@ export function TitleBar() {
     await withWindow((appWindow) => appWindow.close(), "Failed to close:");
   };
 
-  // Mac 上使用原生标题栏，只需要一个透明的拖拽区域
+  // Tauri macOS 使用原生 overlay 标题栏；这里只保留拖拽/避让空间，避免出现第二条网页顶栏
+  if (usesNativeMacTitleBar) {
+    return (
+      <div
+        className="h-8 shrink-0 bg-transparent select-none"
+        data-tauri-drag-region
+        data-testid="macos-titlebar-spacer"
+      />
+    );
+  }
+
+  // 浏览器环境保留轻量标题条，便于本地调试和预览
   if (isMac) {
     return (
       <div

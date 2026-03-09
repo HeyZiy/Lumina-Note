@@ -74,5 +74,18 @@ describe("TitleBar", () => {
       expect(tauriMocks.appWindow.onResized).toHaveBeenCalled();
     });
   });
-});
 
+  it("does not render the web title strip on macOS tauri windows", async () => {
+    tauriMocks.isTauri.mockReturnValue(true);
+    tauriMocks.platform.mockReturnValue("macos");
+
+    render(<TitleBar />);
+
+    await waitFor(() => {
+      expect(tauriMocks.platform).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByText("Lumina Note")).not.toBeInTheDocument();
+    expect(screen.getByTestId("macos-titlebar-spacer")).toBeInTheDocument();
+  });
+});
