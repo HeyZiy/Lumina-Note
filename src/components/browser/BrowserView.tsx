@@ -77,28 +77,6 @@ export function BrowserView({
     }
   }, [tabId, isActive, setActiveTab]);
 
-  // 当 isActive 变化时，显示/隐藏 WebView
-  useEffect(() => {
-    if (!webviewCreated) return;
-    
-    const updateVisibility = async () => {
-      try {
-        await invoke('set_browser_webview_visible', { tabId, visible: isActive });
-        console.log('[Browser] WebView visibility updated:', tabId, isActive);
-      } catch (err) {
-        reportOperationError({
-          source: "BrowserView.updateVisibility",
-          action: "Update browser webview visibility",
-          error: err,
-          level: "warning",
-          context: { tabId, isActive },
-        });
-      }
-    };
-    
-    updateVisibility();
-  }, [tabId, isActive, webviewCreated]);
-
   // 组件卸载时隐藏 WebView
   useEffect(() => {
     return () => {
@@ -299,6 +277,31 @@ export function BrowserView({
       });
     }
   }, [tabId, webviewCreated]);
+
+  // 当 isActive 变化时，显示/隐藏 WebView
+  useEffect(() => {
+    if (!webviewCreated) return;
+
+    const updateVisibility = async () => {
+      try {
+        await invoke('set_browser_webview_visible', { tabId, visible: isActive });
+        if (isActive) {
+          await updateWebviewBounds();
+        }
+        console.log('[Browser] WebView visibility updated:', tabId, isActive);
+      } catch (err) {
+        reportOperationError({
+          source: "BrowserView.updateVisibility",
+          action: "Update browser webview visibility",
+          error: err,
+          level: "warning",
+          context: { tabId, isActive },
+        });
+      }
+    };
+
+    void updateVisibility();
+  }, [tabId, isActive, webviewCreated, updateWebviewBounds]);
 
   // 当 globalHidden 从 true 变为 false 时，更新 WebView 位置
   // 这是为了解决模态框关闭后 WebView 位置错乱的问题

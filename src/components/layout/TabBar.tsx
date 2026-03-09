@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef } from "react";
 import { useFileStore, Tab } from "@/stores/useFileStore";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import { useUIStore } from "@/stores/useUIStore";
@@ -118,7 +118,7 @@ interface ContextMenuState {
 
 export function TabBar() {
   const { t } = useLocaleStore();
-  const { tabs, activeTabIndex, switchTab, closeTab, closeOtherTabs, closeAllTabs, reorderTabs, togglePinTab } =
+  const { tabs, activeTabIndex, switchTab, closeTab, closeOtherTabs, closeAllTabs, togglePinTab } =
     useFileStore(
       useShallow((state) => ({
         tabs: state.tabs,
@@ -127,14 +127,13 @@ export function TabBar() {
         closeTab: state.closeTab,
         closeOtherTabs: state.closeOtherTabs,
         closeAllTabs: state.closeAllTabs,
-        reorderTabs: state.reorderTabs,
         togglePinTab: state.togglePinTab,
       })),
     );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
-  const [dropPosition, setDropPosition] = useState<'left' | 'right' | null>(null);
+  const [dropTargetIndex] = useState<number | null>(null);
+  const [dropPosition] = useState<'left' | 'right' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
@@ -145,6 +144,10 @@ export function TabBar() {
   const handleContextMenu = useCallback((e: React.MouseEvent, index: number) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, tabIndex: index });
+  }, []);
+
+  const handleClickOutside = useCallback(() => {
+    setContextMenu(null);
   }, []);
 
   const handleClose = useCallback(
