@@ -91,4 +91,14 @@ describe("TabBar", () => {
 
     dispatchEventSpy.mockRestore();
   });
+
+  it("uses the existing tab strip whitespace as the macOS drag region", () => {
+    macTopChromeEnabled.value = true;
+
+    render(<TabBar />);
+
+    expect(screen.getByTestId("mac-tabbar-tabstrip")).toHaveAttribute("data-tauri-drag-region", "true");
+    expect(screen.getByTestId("mac-tabbar-top-actions")).toHaveAttribute("data-tauri-drag-region", "false");
+    expect(screen.queryByTestId("mac-tabbar-drag-strip")).not.toBeInTheDocument();
+  });
 });
