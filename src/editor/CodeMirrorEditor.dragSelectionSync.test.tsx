@@ -1,7 +1,99 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as CodeMirrorEditorModule from './CodeMirrorEditor';
 
+function markScrollable(element: HTMLElement, clientHeight: number, scrollHeight: number) {
+  element.style.overflowY = 'auto';
+  Object.defineProperty(element, 'clientHeight', { value: clientHeight, configurable: true });
+  Object.defineProperty(element, 'scrollHeight', { value: scrollHeight, configurable: true });
+}
+
 describe('CodeMirror drag selection sync helper', () => {
+  it('prefers the explicit outer scroll container when it is scrollable', () => {
+    expect(typeof (CodeMirrorEditorModule as any).resolveDragScrollContainer).toBe('function');
+
+    const owner = document.createElement('div');
+    const outer = document.createElement('div');
+    const editor = document.createElement('div');
+    const scroller = document.createElement('div');
+    owner.appendChild(outer);
+    outer.appendChild(editor);
+    editor.appendChild(scroller);
+
+    markScrollable(outer, 320, 1200);
+    markScrollable(scroller, 320, 900);
+
+    const resolved = (CodeMirrorEditorModule as any).resolveDragScrollContainer(
+      { dom: editor, scrollDOM: scroller },
+      { current: outer },
+    );
+
+    expect(resolved).toBe(outer);
+  });
+
+  it('falls back to CodeMirror scrollDOM when no outer scroll container is provided', () => {
+    const owner = document.createElement('div');
+    const editor = document.createElement('div');
+    const scroller = document.createElement('div');
+    owner.appendChild(editor);
+    editor.appendChild(scroller);
+
+    markScrollable(scroller, 240, 1000);
+
+    const resolved = (CodeMirrorEditorModule as any).resolveDragScrollContainer(
+      { dom: editor, scrollDOM: scroller },
+      null,
+    );
+
+    expect(resolved).toBe(scroller);
+  });
+
+  it('computes edge auto-scroll speed with a browser-like gradient', () => {
+    expect(typeof (CodeMirrorEditorModule as any).getDragAutoScrollDelta).toBe('function');
+
+    const scrollerRect = { top: 100, bottom: 500, height: 400 };
+
+    const slowBottom = (CodeMirrorEditorModule as any).getDragAutoScrollDelta(448, scrollerRect);
+    const fastBottom = (CodeMirrorEditorModule as any).getDragAutoScrollDelta(496, scrollerRect);
+    const safeZone = (CodeMirrorEditorModule as any).getDragAutoScrollDelta(300, scrollerRect);
+    const topEdge = (CodeMirrorEditorModule as any).getDragAutoScrollDelta(104, scrollerRect);
+
+    expect(slowBottom).toBeGreaterThan(0);
+    expect(fastBottom).toBeGreaterThan(slowBottom);
+    expect(safeZone).toBe(0);
+    expect(topEdge).toBeLessThan(0);
+  });
+
+  it('drops line clamping when the pointer enters the edge auto-scroll zone', () => {
+    expect(typeof (CodeMirrorEditorModule as any).resolveDragSelectionLineRange).toBe('function');
+
+    const hoveredLineRange = { from: 138, to: 152 };
+    const scrollerRect = { top: 100, bottom: 500, height: 400 };
+
+    expect(
+      (CodeMirrorEditorModule as any).resolveDragSelectionLineRange(
+        hoveredLineRange,
+        260,
+        scrollerRect,
+      ),
+    ).toEqual(hoveredLineRange);
+
+    expect(
+      (CodeMirrorEditorModule as any).resolveDragSelectionLineRange(
+        hoveredLineRange,
+        494,
+        scrollerRect,
+      ),
+    ).toBeNull();
+
+    expect(
+      (CodeMirrorEditorModule as any).resolveDragSelectionLineRange(
+        hoveredLineRange,
+        520,
+        scrollerRect,
+      ),
+    ).toBeNull();
+  });
+
   it('syncs the selection head from editor coordinates in Tauri WebKit path', () => {
     expect(typeof (CodeMirrorEditorModule as any).syncDragSelectionHeadFromCoords).toBe('function');
 

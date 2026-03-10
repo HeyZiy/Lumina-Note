@@ -1,4 +1,4 @@
-import { useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from 'react';
+import { useEffect, useRef, useImperativeHandle, forwardRef, useCallback, type RefObject } from 'react';
 import { useFileStore } from '@/stores/useFileStore';
 import { useAIStore } from '@/stores/useAIStore';
 import { useSplitStore } from '@/stores/useSplitStore';
@@ -78,6 +78,7 @@ interface CodeMirrorEditorProps {
   className?: string;
   viewMode?: ViewMode;
   livePreview?: boolean;
+  scrollContainerRef?: RefObject<HTMLElement>;
 }
 
 export interface CodeMirrorEditorRef {
@@ -1543,6 +1544,93 @@ function selectAllDebugEnabled() {
 
 type DragLineRange = { from: number; to: number };
 
+type DragScrollRect = { top: number; bottom: number; height: number };
+
+const DRAG_AUTO_SCROLL_EDGE_ZONE_MIN_PX = 36;
+const DRAG_AUTO_SCROLL_EDGE_ZONE_MAX_PX = 96;
+const DRAG_AUTO_SCROLL_MAX_STEP_PX = 28;
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function getDragAutoScrollDelta(clientY: number, scrollerRect: DragScrollRect | null) {
+  if (!scrollerRect || scrollerRect.height <= 0) return 0;
+  const edgeZone = clampNumber(
+    Math.round(scrollerRect.height * 0.18),
+    DRAG_AUTO_SCROLL_EDGE_ZONE_MIN_PX,
+    DRAG_AUTO_SCROLL_EDGE_ZONE_MAX_PX,
+  );
+
+  const edgeDistance =
+    clientY < scrollerRect.top + edgeZone
+      ? clientY - (scrollerRect.top + edgeZone)
+      : clientY > scrollerRect.bottom - edgeZone
+        ? clientY - (scrollerRect.bottom - edgeZone)
+        : 0;
+
+  if (edgeDistance === 0) return 0;
+
+  const direction = edgeDistance > 0 ? 1 : -1;
+  const ratio = clampNumber(Math.abs(edgeDistance) / edgeZone, 0, 1);
+  const easedRatio = ratio * ratio;
+  const step = Math.max(1, Math.round(easedRatio * DRAG_AUTO_SCROLL_MAX_STEP_PX));
+  return direction * step;
+}
+
+export function resolveDragSelectionLineRange(
+  lineRange: DragLineRange | null | undefined,
+  clientY: number,
+  scrollerRect: DragScrollRect | null,
+) {
+  if (!lineRange) return null;
+  return getDragAutoScrollDelta(clientY, scrollerRect) === 0 ? lineRange : null;
+}
+
+function clampDragSelectionClientY(clientY: number, scrollerRect: DragScrollRect | null) {
+  if (!scrollerRect) return clientY;
+  const minY = scrollerRect.top + 1;
+  const maxY = Math.max(minY, scrollerRect.bottom - 1);
+  return clampNumber(clientY, minY, maxY);
+}
+
+function canElementScrollVertically(element: HTMLElement | null | undefined) {
+  if (!element) return false;
+  const style = window.getComputedStyle(element);
+  const overflowY = style.overflowY || style.overflow;
+  if (!/(auto|scroll|overlay)/.test(overflowY)) return false;
+  return element.scrollHeight > element.clientHeight + 1;
+}
+
+export function resolveDragScrollContainer(
+  view: Pick<EditorView, 'dom' | 'scrollDOM'>,
+  externalScrollContainerRef?: RefObject<HTMLElement> | null,
+) {
+  const explicitContainer = externalScrollContainerRef?.current ?? null;
+  if (canElementScrollVertically(explicitContainer)) {
+    return explicitContainer;
+  }
+
+  let current: HTMLElement | null = view.dom.parentElement;
+  while (current) {
+    if (canElementScrollVertically(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  if (canElementScrollVertically(view.scrollDOM)) {
+    return view.scrollDOM;
+  }
+
+  const scrollingElement = view.dom.ownerDocument.scrollingElement;
+  if (scrollingElement instanceof HTMLElement && canElementScrollVertically(scrollingElement)) {
+    return scrollingElement;
+  }
+
+  return view.scrollDOM;
+}
+
 type ManualDragSelectableView = {
   inputState?: {
     mouseSelection?: {
@@ -2832,7 +2920,10 @@ const voicePreviewField = StateField.define<DecorationSet>({
 // ============ 10. React 组件 ============
 
 export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditorProps>(
-  function CodeMirrorEditor({ content, onChange, className = '', viewMode, livePreview }, ref) {
+  function CodeMirrorEditor(
+    { content, onChange, className = '', viewMode, livePreview, scrollContainerRef },
+    ref,
+  ) {
     const { t } = useLocaleStore();
 
     const effectiveMode: ViewMode = viewMode ?? (livePreview === false ? 'source' : 'live');
@@ -3043,23 +3134,41 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       let dragSelectionActive = false;
       let mouseDownX = 0;
       let mouseDownY = 0;
+      let lastDragClientX = 0;
+      let lastDragClientY = 0;
       let lastDragMoveSampleAt = 0;
       let dragSelectionAnchor: number | null = null;
       let lastDragLineRange: DragLineRange | null = null;
+      let dragAutoScrollFrame = 0;
       const manualDragSelectionSyncEnabled = shouldDisableDrawSelectionForTauriWebKit();
 
-      const syncDragSelectionFromCoords = (
-        x: number,
-        y: number,
-        source: string,
-        lineRange: DragLineRange | null = lastDragLineRange,
-      ) => {
+      const stopDragAutoScroll = () => {
+        if (!dragAutoScrollFrame) return;
+        cancelAnimationFrame(dragAutoScrollFrame);
+        dragAutoScrollFrame = 0;
+      };
+
+        const syncDragSelectionFromCoords = (
+          x: number,
+          y: number,
+          source: string,
+          lineRange: DragLineRange | null = lastDragLineRange,
+        ) => {
         if (!manualDragSelectionSyncEnabled) return false;
         if (dragSelectionAnchor === null) {
           dragSelectionAnchor = view.state.selection.main.anchor;
         }
+        const dragScrollContainer = resolveDragScrollContainer(view, scrollContainerRef);
+        const scrollerRect = dragScrollContainer?.getBoundingClientRect() ?? null;
+        const effectiveLineRange = resolveDragSelectionLineRange(lineRange, y, scrollerRect);
         lastDragLineRange = lineRange;
-        const changed = syncDragSelectionHeadFromCoords(view, dragSelectionAnchor, x, y, lineRange);
+        const changed = syncDragSelectionHeadFromCoords(
+          view,
+          dragSelectionAnchor,
+          x,
+          clampDragSelectionClientY(y, scrollerRect),
+          effectiveLineRange,
+        );
         if (changed) {
           selectionTrace.event('drag-selection-synced', {
             source,
@@ -3071,6 +3180,41 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
           selectionTrace.snapshot('drag-selection-synced');
         }
         return changed;
+      };
+
+      const scheduleDragAutoScroll = () => {
+        if (!manualDragSelectionSyncEnabled || dragAutoScrollFrame || !dragSelectionActive) return;
+
+        const runDragAutoScroll = () => {
+          dragAutoScrollFrame = 0;
+          if (!manualDragSelectionSyncEnabled || !mouseDownActive || !dragSelectionActive) return;
+
+          const scroller = resolveDragScrollContainer(view, scrollContainerRef);
+          const scrollerRect = scroller?.getBoundingClientRect() ?? null;
+          const delta = getDragAutoScrollDelta(lastDragClientY, scrollerRect);
+          if (!scroller || !scrollerRect || delta === 0) return;
+
+          const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+          const prevScrollTop = scroller.scrollTop;
+          const nextScrollTop = clampNumber(prevScrollTop + delta, 0, maxScrollTop);
+
+          if (nextScrollTop === prevScrollTop) return;
+
+          scroller.scrollTop = nextScrollTop;
+          syncDragSelectionFromCoords(lastDragClientX, lastDragClientY, 'drag-autoscroll', null);
+          selectionTrace.event('drag-autoscroll', {
+            delta,
+            prevScrollTop,
+            nextScrollTop,
+          });
+          selectionTrace.snapshot('drag-autoscroll');
+
+          if (getDragAutoScrollDelta(lastDragClientY, scrollerRect) !== 0) {
+            dragAutoScrollFrame = requestAnimationFrame(runDragAutoScroll);
+          }
+        };
+
+        dragAutoScrollFrame = requestAnimationFrame(runDragAutoScroll);
       };
 
       const clearDragSelectionState = () => {
@@ -3085,6 +3229,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         mouseDownActive = false;
         dragSelectionAnchor = null;
         lastDragLineRange = null;
+        stopDragAutoScroll();
         if (!hadDragSelection) {
           stopSelectionProbe();
           return;
@@ -3115,6 +3260,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         mouseDownActive = true;
         mouseDownX = event.clientX;
         mouseDownY = event.clientY;
+        lastDragClientX = event.clientX;
+        lastDragClientY = event.clientY;
         dragSelectionAnchor = null;
         lastDragLineRange = getDragLineRangeFromTarget(view, event.target);
         selectionTrace.event('mouse-down', {
@@ -3162,11 +3309,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
           if (syncDragSelectionFromCoords(event.clientX, event.clientY, 'drag-start', dragLineRange)) {
             event.preventDefault();
           }
+          scheduleDragAutoScroll();
           startSelectionProbe();
           reportSelectionVisualAnomaly('drag-start');
           return;
         }
 
+        lastDragClientX = event.clientX;
+        lastDragClientY = event.clientY;
         const dragLineRange = getDragLineRangeFromTarget(view, event.target);
         if (manualDragSelectionSyncEnabled) {
           event.preventDefault();
@@ -3174,6 +3324,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         if (syncDragSelectionFromCoords(event.clientX, event.clientY, 'drag-move', dragLineRange)) {
           event.preventDefault();
         }
+        scheduleDragAutoScroll();
 
         const now = Date.now();
         if (now - lastDragMoveSampleAt < 90) return;
@@ -3734,7 +3885,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       <>
         <div
           ref={containerRef}
-          className={`codemirror-wrapper h-full overflow-auto ${className}`}
+          className={`codemirror-wrapper h-full ${className}`}
         />
         <SlashMenu view={viewRef.current} />
       </>

@@ -483,6 +483,7 @@ export function Editor() {
                     debouncedSave();
                   }}
                   viewMode={editorMode as ViewMode}
+                  scrollContainerRef={scrollContainerRef}
                 />
               </div>
             </div>
