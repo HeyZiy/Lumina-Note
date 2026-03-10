@@ -2981,7 +2981,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       })),
     );
     const { openSecondaryPdf } = useSplitStore();
-    const { setSplitView, editorFontSize } = useUIStore();
+    const { setSplitView, editorFontSize, editorInteractionTraceEnabled } = useUIStore();
 
     const getModeExtensions = useCallback(
       (mode: ViewMode) => {
@@ -3814,6 +3814,25 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       });
       syncSelectionToViewport();
     }, [effectiveMode, syncSelectionToViewport]);
+
+    useEffect(() => {
+      const traceApi = (window as any).__luminaEditorTrace;
+      if (!traceApi) return;
+      if (editorInteractionTraceEnabled) {
+        traceApi.enable(false);
+        traceApi.clear();
+        traceApi.mark('interaction-trace-toggle-enabled', {
+          source: 'ui-store',
+          mode: effectiveMode,
+        });
+        return;
+      }
+      traceApi.mark('interaction-trace-toggle-disabled', {
+        source: 'ui-store',
+        mode: effectiveMode,
+      });
+      traceApi.disable(false);
+    }, [editorInteractionTraceEnabled, effectiveMode]);
 
     useEffect(() => {
       const view = viewRef.current;

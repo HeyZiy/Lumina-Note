@@ -86,6 +86,8 @@ interface UIState {
   // Diagnostics
   diagnosticsEnabled: boolean;
   setDiagnosticsEnabled: (enabled: boolean) => void;
+  editorInteractionTraceEnabled: boolean;
+  setEditorInteractionTraceEnabled: (enabled: boolean) => void;
 
   // Editor font size
   editorFontSize: number;
@@ -196,6 +198,8 @@ export const useUIStore = create<UIState>()(
       // Diagnostics
       diagnosticsEnabled: false,
       setDiagnosticsEnabled: (enabled) => set({ diagnosticsEnabled: enabled }),
+      editorInteractionTraceEnabled: false,
+      setEditorInteractionTraceEnabled: (enabled) => set({ editorInteractionTraceEnabled: enabled }),
 
       // Editor font size (10-32px)
       editorFontSize: 16,

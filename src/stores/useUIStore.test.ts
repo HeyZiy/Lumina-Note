@@ -33,6 +33,8 @@ describe('useUIStore', () => {
       videoNoteOpen: false,
       videoNoteUrl: null,
       isSettingsOpen: false,
+      diagnosticsEnabled: false,
+      editorInteractionTraceEnabled: false,
     });
     vi.clearAllMocks();
   });
@@ -251,6 +253,19 @@ describe('useUIStore', () => {
       expect(useUIStore.getState().videoNoteUrl).toBeNull();
     });
   });
+
+  describe('diagnostics', () => {
+    it('should set editor interaction trace mode', () => {
+      const store = useUIStore.getState();
+
+      store.setEditorInteractionTraceEnabled(true);
+      expect(useUIStore.getState().editorInteractionTraceEnabled).toBe(true);
+
+      store.setEditorInteractionTraceEnabled(false);
+      expect(useUIStore.getState().editorInteractionTraceEnabled).toBe(false);
+    });
+  });
+
 
   describe('settings modal', () => {
     it('should set settings open', () => {
