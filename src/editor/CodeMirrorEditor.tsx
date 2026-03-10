@@ -1645,7 +1645,6 @@ type TransitionSelectionSnapshot = {
   head: number;
   from: number;
   to: number;
-  withinViewport: boolean;
 };
 
 type ModeTransitionSnapshot = {
@@ -1662,9 +1661,11 @@ type ModeTransitionPlan = {
   toMode: ViewMode;
   kind: ModeTransitionKind;
   viewportAnchor: SharedDocumentAnchor;
-  selectionToRestore: { anchor: number; head?: number } | null;
-  preserveSelection: boolean;
-  armFirstPointerIntentOverride: boolean;
+};
+
+type PendingModeTransitionRestore = {
+  transitionId: number;
+  canceledByUserIntent: boolean;
 };
 
 function getModeCategory(mode: ViewMode): ModeCategory {
@@ -1728,20 +1729,6 @@ function captureViewportAnchor(
   };
 }
 
-function isSelectionNearViewportAnchor(
-  view: Pick<EditorView, 'state'>,
-  selection: { anchor: number; from: number; to: number },
-  viewportAnchorPos: number,
-) {
-  try {
-    const selectionLine = view.state.doc.lineAt(selection.anchor).number;
-    const viewportLine = view.state.doc.lineAt(viewportAnchorPos).number;
-    return Math.abs(selectionLine - viewportLine) <= 20;
-  } catch {
-    return selection.to >= viewportAnchorPos && selection.from <= viewportAnchorPos;
-  }
-}
-
 function captureModeTransitionSnapshot(
   view: Pick<EditorView, 'state' | 'viewport' | 'scrollDOM' | 'lineBlockAtHeight' | 'posAtCoords' | 'dom'>,
   mode: ViewMode,
@@ -1757,7 +1744,6 @@ function captureModeTransitionSnapshot(
       head: selection.head,
       from: selection.from,
       to: selection.to,
-      withinViewport: isSelectionNearViewportAnchor(view, selection, viewportAnchor.pos),
     },
     viewport: {
       from: view.viewport.from,
@@ -1773,24 +1759,12 @@ function buildModeTransitionPlan(options: {
   toMode: ViewMode;
 }): ModeTransitionPlan {
   const { transitionId, snapshot, toMode } = options;
-  const kind = classifyModeTransition(snapshot.mode, toMode);
-  const targetCategory = getModeCategory(toMode);
-  const preserveSelection = kind === 'edit-to-edit' && snapshot.selection.withinViewport;
-
   return {
     transitionId,
     fromMode: snapshot.mode,
     toMode,
-    kind,
+    kind: classifyModeTransition(snapshot.mode, toMode),
     viewportAnchor: snapshot.viewportAnchor,
-    selectionToRestore:
-      targetCategory !== 'edit'
-        ? { anchor: snapshot.viewportAnchor.pos }
-        : preserveSelection
-          ? { anchor: snapshot.selection.anchor, head: snapshot.selection.head }
-          : { anchor: snapshot.viewportAnchor.pos },
-    preserveSelection,
-    armFirstPointerIntentOverride: targetCategory === 'edit',
   };
 }
 
@@ -1860,62 +1834,6 @@ function getViewportSelectionAnchor(
   } catch {
     return clampNumber(view.viewport.from, 0, docLength);
   }
-}
-
-function shouldSkipFirstLivePointerRestoreGuard(
-  contentDOM: HTMLElement,
-  target: EventTarget | null,
-) {
-  const element = target instanceof Element ? target : null;
-  if (!element) return false;
-  if (element.closest('button, a[href], input, textarea, select')) {
-    return true;
-  }
-  const editableHost = element.closest('[contenteditable="true"]');
-  if (editableHost && editableHost !== contentDOM) {
-    return true;
-  }
-  return false;
-}
-
-export function suppressStaleSelectionRestoreOnFirstLivePointerDown(
-  view: Pick<EditorView, 'state' | 'dispatch' | 'focus' | 'posAtCoords' | 'dom' | 'contentDOM' | 'scrollDOM' | 'lineBlockAtHeight' | 'viewport'>,
-  event: Pick<PointerEvent, 'button' | 'clientX' | 'clientY' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'preventDefault' | 'target'>,
-) {
-  if (event.button !== 0) return false;
-  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return false;
-  if (shouldSkipFirstLivePointerRestoreGuard(view.contentDOM, event.target)) return false;
-
-  const ownerDoc = view.dom.ownerDocument;
-  const domSelection = ownerDoc.getSelection();
-  const domRangeCount = domSelection?.rangeCount ?? 0;
-  if (domRangeCount > 0) {
-    domSelection?.removeAllRanges();
-  }
-
-  const nextAnchor = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? getViewportSelectionAnchor(view);
-  const currentSelection = view.state.selection.main;
-
-  event.preventDefault();
-  view.focus();
-
-  if (currentSelection.from !== nextAnchor || currentSelection.to !== nextAnchor) {
-    view.dispatch({
-      selection: { anchor: nextAnchor },
-      scrollIntoView: false,
-    });
-  }
-
-  return {
-    nextAnchor,
-    domRangeCount,
-    previousSelection: {
-      from: currentSelection.from,
-      to: currentSelection.to,
-      anchor: currentSelection.anchor,
-      head: currentSelection.head,
-    },
-  };
 }
 
 type ManualDragSelectableView = {
@@ -3279,10 +3197,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
     const lastInternalContent = useRef<string>(content);
     const previousModeRef = useRef<ViewMode>(effectiveMode);
     const effectiveModeRef = useRef<ViewMode>(effectiveMode);
-    const suppressNextLivePointerRestoreRef = useRef(false);
+    const pendingModeTransitionRestoreRef = useRef<PendingModeTransitionRestore | null>(null);
     const transitionSequenceRef = useRef(0);
-    const lastExplicitEditIntentAtRef = useRef(0);
-    const lastProgrammaticSelectionAtRef = useRef(0);
 
     const { openVideoNoteTab, openPDFTab, fileTree, openFile, vaultPath } = useFileStore(
       useShallow((state) => ({
@@ -3345,7 +3261,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       if (selection.from === nextAnchor && selection.to === nextAnchor) {
         return;
       }
-      lastProgrammaticSelectionAtRef.current = Date.now();
       markTransitionTrace('selection-synced-to-viewport', {
         previousAnchor: selection.anchor,
         previousHead: selection.head,
@@ -3363,25 +3278,65 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       });
     }, [markTransitionTrace, scrollContainerRef]);
 
+    const clearDocumentSelection = useCallback((ownerDoc: Document) => {
+      const domSelection = ownerDoc.getSelection();
+      if ((domSelection?.rangeCount ?? 0) > 0) {
+        domSelection?.removeAllRanges();
+      }
+    }, []);
+
+    const discardCrossModeCaret = useCallback(
+      (view: EditorView, anchor: SharedDocumentAnchor, transition: Omit<ModeTransitionPlan, 'viewportAnchor'>) => {
+        const currentSelection = view.state.selection.main;
+        if (currentSelection.from !== anchor.pos || currentSelection.to !== anchor.pos) {
+          view.dispatch({
+            selection: { anchor: anchor.pos },
+            scrollIntoView: false,
+          });
+        }
+
+        const ownerDoc = view.dom.ownerDocument;
+        clearDocumentSelection(ownerDoc);
+        const activeElement = ownerDoc.activeElement;
+        if (activeElement instanceof HTMLElement && view.dom.contains(activeElement)) {
+          activeElement.blur();
+        }
+
+        markTransitionTrace('mode-transition-caret-discarded', {
+          transitionId: transition.transitionId,
+          fromMode: transition.fromMode,
+          toMode: transition.toMode,
+          kind: transition.kind,
+          anchor: anchor.pos,
+        });
+      },
+      [clearDocumentSelection, markTransitionTrace],
+    );
+
     const applyModeTransitionPlan = useCallback(
       (view: EditorView, plan: ModeTransitionPlan) => {
+        pendingModeTransitionRestoreRef.current = {
+          transitionId: plan.transitionId,
+          canceledByUserIntent: false,
+        };
+
         const applyRestore = (phase: 'raf-1' | 'raf-2') => {
           if (viewRef.current !== view) return;
-          const scrollContainer = resolveViewportScrollContainer(view, scrollContainerRef);
-          if (plan.selectionToRestore) {
-            const currentSelection = view.state.selection.main;
-            const nextHead = plan.selectionToRestore.head ?? plan.selectionToRestore.anchor;
-            if (
-              currentSelection.anchor !== plan.selectionToRestore.anchor ||
-              currentSelection.head !== nextHead
-            ) {
-              lastProgrammaticSelectionAtRef.current = Date.now();
-              view.dispatch({
-                selection: plan.selectionToRestore,
-                scrollIntoView: false,
-              });
+          const pendingRestore = pendingModeTransitionRestoreRef.current;
+          if (pendingRestore?.transitionId === plan.transitionId && pendingRestore.canceledByUserIntent) {
+            markTransitionTrace('mode-transition-restore-skipped', {
+              transitionId: plan.transitionId,
+              phase,
+              fromMode: plan.fromMode,
+              toMode: plan.toMode,
+              reason: 'user-intent',
+            });
+            if (phase === 'raf-2') {
+              pendingModeTransitionRestoreRef.current = null;
             }
+            return;
           }
+          const scrollContainer = resolveViewportScrollContainer(view, scrollContainerRef);
           const restoreResult = restoreViewportAnchor(view, scrollContainer, plan.viewportAnchor);
           markTransitionTrace('mode-transition-restore-applied', {
             transitionId: plan.transitionId,
@@ -3389,7 +3344,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
             fromMode: plan.fromMode,
             toMode: plan.toMode,
             kind: plan.kind,
-            preserveSelection: plan.preserveSelection,
             selectionAnchor: view.state.selection.main.anchor,
             selectionHead: view.state.selection.main.head,
             scrollTop: scrollContainer.scrollTop,
@@ -3401,9 +3355,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
             offsetTop: restoreResult.offsetTop,
             scrollContainerSource: scrollContainer === view.scrollDOM ? 'codemirror' : 'external',
           });
+          if (phase === 'raf-2' && pendingModeTransitionRestoreRef.current?.transitionId === plan.transitionId) {
+            pendingModeTransitionRestoreRef.current = null;
+          }
         };
 
-        suppressNextLivePointerRestoreRef.current = plan.armFirstPointerIntentOverride;
         requestAnimationFrame(() => {
           applyRestore('raf-1');
           requestAnimationFrame(() => {
@@ -3412,6 +3368,21 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         });
       },
       [markTransitionTrace, scrollContainerRef],
+    );
+
+    const cancelPendingModeTransitionRestore = useCallback(
+      (reason: string, payload: Record<string, unknown> = {}) => {
+        const pendingRestore = pendingModeTransitionRestoreRef.current;
+        if (!pendingRestore || pendingRestore.canceledByUserIntent) return false;
+        pendingRestore.canceledByUserIntent = true;
+        markTransitionTrace('mode-transition-restore-cancelled', {
+          transitionId: pendingRestore.transitionId,
+          reason,
+          ...payload,
+        });
+        return true;
+      },
+      [markTransitionTrace],
     );
 
     useImperativeHandle(
@@ -3816,20 +3787,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       };
       let lastScrollTraceAt = 0;
       let lastPointerMoveTraceAt = 0;
-      const handleFirstLivePointerRestoreGuard = (event: PointerEvent) => {
-        if (!suppressNextLivePointerRestoreRef.current) return;
-        const result = suppressStaleSelectionRestoreOnFirstLivePointerDown(view, event);
-        if (!result) return;
-        suppressNextLivePointerRestoreRef.current = false;
-        selectionTrace.event('first-live-pointerdown-guard', {
-          x: event.clientX,
-          y: event.clientY,
-          nextAnchor: result.nextAnchor,
-          domRangeCount: result.domRangeCount,
-          previousSelection: result.previousSelection,
-        });
-        selectionTrace.snapshot('first-live-pointerdown-guard');
-      };
       const traceScrollableSnapshot = (source: string, element: HTMLElement | null) => {
         if (!element) return;
         selectionTrace.event(source, {
@@ -3868,14 +3825,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       };
       const handleEditorWheel = (event: WheelEvent) => {
         traceInputEvent('editor-wheel', event);
+        cancelPendingModeTransitionRestore('wheel', {
+          mode: effectiveModeRef.current,
+          x: event.clientX,
+          y: event.clientY,
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+        });
       };
       const handleContentPointerDown = (event: PointerEvent) => {
         traceInputEvent('content-pointerdown', event);
         if (event.button !== 0) return;
-        if (getModeCategory(effectiveModeRef.current) !== 'edit') return;
-        lastExplicitEditIntentAtRef.current = Date.now();
-        selectionTrace.event('explicit-edit-intent', {
-          source: 'pointerdown',
+        cancelPendingModeTransitionRestore('pointerdown', {
           mode: effectiveModeRef.current,
           x: event.clientX,
           y: event.clientY,
@@ -3913,17 +3874,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       };
       const handleEditorKeyDown = (event: KeyboardEvent) => {
         if (!isViewActive(view, event.target)) return;
-        if (getModeCategory(effectiveModeRef.current) !== 'edit') return;
         if (!isMeaningfulEditIntentKey(event)) return;
-        lastExplicitEditIntentAtRef.current = Date.now();
-        selectionTrace.event('explicit-edit-intent', {
-          source: 'keydown',
+        cancelPendingModeTransitionRestore('keydown', {
           mode: effectiveModeRef.current,
           key: event.key,
           code: event.code,
         });
       };
-      view.contentDOM.addEventListener('pointerdown', handleFirstLivePointerRestoreGuard, true);
       view.contentDOM.addEventListener('mousedown', handleMouseDown);
       view.scrollDOM.addEventListener('scroll', handleEditorScroll, { passive: true });
       view.scrollDOM.addEventListener('wheel', handleEditorWheel, { passive: true });
@@ -4212,7 +4169,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       return () => {
         stopSelectionProbe();
         selectionTrace.destroy('editor-cleanup');
-        view.contentDOM.removeEventListener('pointerdown', handleFirstLivePointerRestoreGuard, true);
         view.contentDOM.removeEventListener('mousedown', handleMouseDown);
         view.contentDOM.removeEventListener('mousedown', handleClick);
         view.contentDOM.removeEventListener('paste', handlePaste);
@@ -4272,11 +4228,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
           selectionHead: snapshot.selection.head,
           selectionFrom: snapshot.selection.from,
           selectionTo: snapshot.selection.to,
-          selectionWithinViewport: snapshot.selection.withinViewport,
           viewportFrom: snapshot.viewport.from,
           viewportTo: snapshot.viewport.to,
-          preserveSelection: transitionPlan.preserveSelection,
         });
+        discardCrossModeCaret(view, transitionPlan.viewportAnchor, transitionPlan);
       }
 
       markTransitionTrace('view-mode-reconfigure', {
@@ -4307,6 +4262,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
       previousModeRef.current = effectiveMode;
     }, [
       applyModeTransitionPlan,
+      discardCrossModeCaret,
       effectiveMode,
       getModeExtensions,
       isReadOnly,

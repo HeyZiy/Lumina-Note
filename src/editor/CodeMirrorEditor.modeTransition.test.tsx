@@ -102,10 +102,11 @@ describe('CodeMirror editor mode transition selection sync', () => {
     lineBlockSpy.mockRestore();
   });
 
-  it('preserves a visible edit selection when switching between edit modes after explicit user intent', async () => {
+  it('discards a visible edit selection when switching between edit modes', async () => {
     const content = Array.from({ length: 80 }, (_, i) => `Line ${i + 1}`).join('\n');
     const { container, view, rerender } = setupEditor(content, 'live');
     const visibleLineStart = content.indexOf('Line 3');
+    const viewportAnchor = content.indexOf('Line 40');
     const contentDom = container.querySelector('.cm-content');
 
     if (!(contentDom instanceof HTMLElement)) {
@@ -125,13 +126,20 @@ describe('CodeMirror editor mode transition selection sync', () => {
       view.dispatch({ selection: { anchor: visibleLineStart, head: visibleLineStart + 6 } });
     });
 
+    const lineBlockSpy = mockVisibleLineAtScroll(view, viewportAnchor);
+
     act(() => {
       rerender(<CodeMirrorEditor content={content} onChange={vi.fn()} viewMode="source" />);
     });
+
+    expect(view.state.selection.main.anchor).toBe(viewportAnchor);
+    expect(view.state.selection.main.from).toBe(view.state.selection.main.to);
+
     await flushTransitionFrames();
 
-    expect(view.state.selection.main.anchor).toBe(visibleLineStart);
-    expect(view.state.selection.main.head).toBe(visibleLineStart + 6);
+    expect(view.state.selection.main.anchor).toBe(viewportAnchor);
+    expect(view.state.selection.main.from).toBe(view.state.selection.main.to);
+    lineBlockSpy.mockRestore();
   });
 
   it('collapses stale edit selection to viewport anchor when entering reading mode, preventing range selection on next click', async () => {
@@ -152,12 +160,49 @@ describe('CodeMirror editor mode transition selection sync', () => {
     act(() => {
       rerender(<CodeMirrorEditor content={content} onChange={vi.fn()} viewMode="reading" />);
     });
+
+    expect(view.state.selection.main.anchor).toBe(bottomViewport);
+    expect(view.state.selection.main.from).toBe(view.state.selection.main.to);
+
     await flushTransitionFrames();
 
     // The CM selection must NOT be stale at topCaret — it should be at the viewport anchor
     expect(view.state.selection.main.anchor).toBe(bottomViewport);
     expect(view.state.selection.main.from).toBe(view.state.selection.main.to);
     lineBlockSpy.mockRestore();
+  });
+
+  it('clears DOM selection when modes change', async () => {
+    const content = Array.from({ length: 80 }, (_, i) => `Line ${i + 1}`).join('\n');
+    const { container, rerender } = setupEditor(content, 'live');
+    const contentDom = container.querySelector('.cm-content');
+
+    if (!(contentDom instanceof HTMLElement)) {
+      throw new Error('CodeMirror content DOM not found');
+    }
+
+    const firstTextNode = contentDom.querySelector('.cm-line')?.firstChild;
+    if (!(firstTextNode instanceof Text)) {
+      throw new Error('Expected first line text node');
+    }
+
+    const selection = document.getSelection();
+    if (!selection) {
+      throw new Error('Document selection is not available');
+    }
+    const range = document.createRange();
+    range.setStart(firstTextNode, 0);
+    range.setEnd(firstTextNode, Math.min(4, firstTextNode.textContent?.length ?? 0));
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    expect(selection.rangeCount).toBe(1);
+
+    act(() => {
+      rerender(<CodeMirrorEditor content={content} onChange={vi.fn()} viewMode="reading" />);
+    });
+
+    expect(selection.rangeCount).toBe(0);
   });
 
   it('falls back to the current viewport when switching between edit modes with an off-screen stale caret', async () => {
