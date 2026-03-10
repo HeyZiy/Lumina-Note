@@ -1722,7 +1722,7 @@ const CM_SELECTION_VISUAL_DEBUG_STORAGE_KEY = 'cmSelectionVisualDebug';
 const CM_SELECTION_TRACE_STORAGE_KEY = 'cmSelectionVisualTrace';
 const CM_SELECTION_ANOMALY_THROTTLE_MS = 180;
 const CM_SELECTION_TRACE_DEFAULT_FRAME_INTERVAL_MS = 34;
-const CM_SELECTION_TRACE_MAX_EVENTS = 2000;
+const CM_SELECTION_TRACE_MAX_EVENTS = 5000;
 const CM_SELECTION_TRACE_MAX_FRAMES = 3600;
 const DRAG_SELECTION_THRESHOLD_PX = 4;
 
@@ -2213,6 +2213,41 @@ function summarizeInteractionTarget(target: EventTarget | null) {
     widgetType: widget?.dataset.widgetType || '',
     href: link?.getAttribute('href') || '',
   };
+}
+
+function summarizePointerLikeEvent(event: MouseEvent | PointerEvent | WheelEvent) {
+  const base = {
+    x: event.clientX,
+    y: event.clientY,
+    button: 'button' in event ? event.button : -1,
+    buttons: 'buttons' in event ? event.buttons : 0,
+    detail: 'detail' in event ? event.detail : 0,
+    ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    ...summarizeInteractionTarget(event.target),
+  };
+  if (event instanceof WheelEvent) {
+    return {
+      ...base,
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      deltaZ: event.deltaZ,
+      deltaMode: event.deltaMode,
+    };
+  }
+  const PointerEventCtor = (globalThis as { PointerEvent?: typeof PointerEvent }).PointerEvent;
+  if (PointerEventCtor && event instanceof PointerEventCtor) {
+    return {
+      ...base,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      pressure: event.pressure,
+      isPrimary: event.isPrimary,
+    };
+  }
+  return base;
 }
 
 function collectTransformChain(element: Element | null, limit = 8) {
@@ -3327,10 +3362,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         dragSelectionAnchor = null;
         lastDragLineRange = getDragLineRangeFromTarget(view, event.target);
         selectionTrace.event('mouse-down', {
-          x: event.clientX,
-          y: event.clientY,
-          button: event.button,
-          buttons: event.buttons,
+          ...summarizePointerLikeEvent(event),
+          currentSelection: {
+            from: view.state.selection.main.from,
+            to: view.state.selection.main.to,
+            head: view.state.selection.main.head,
+          },
         });
         selectionTrace.snapshot('mouse-down');
         reportSelectionVisualAnomaly('mousedown');
@@ -3417,6 +3454,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         selectionTrace.event('mouse-up', {
           dragClass: view.dom.classList.contains('cm-drag-selecting'),
           mouseSelectingField: view.state.field(mouseSelectingField, false),
+          currentSelection: {
+            from: view.state.selection.main.from,
+            to: view.state.selection.main.to,
+            head: view.state.selection.main.head,
+          },
         });
         selectionTrace.snapshot('mouse-up');
         clearDragSelectionState();
@@ -3433,6 +3475,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         clearDragSelectionState();
       };
       let lastScrollTraceAt = 0;
+      let lastPointerMoveTraceAt = 0;
       const traceScrollableSnapshot = (source: string, element: HTMLElement | null) => {
         if (!element) return;
         selectionTrace.event(source, {
@@ -3443,11 +3486,50 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         });
         selectionTrace.snapshot(source);
       };
+      const traceInputEvent = (
+        source: string,
+        event: MouseEvent | PointerEvent | WheelEvent,
+        snapshot = true,
+      ) => {
+        selectionTrace.event(source, {
+          ...summarizePointerLikeEvent(event),
+          currentSelection: {
+            from: view.state.selection.main.from,
+            to: view.state.selection.main.to,
+            head: view.state.selection.main.head,
+          },
+          scrollTop: view.scrollDOM.scrollTop,
+          viewportFrom: view.viewport.from,
+          viewportTo: view.viewport.to,
+        });
+        if (snapshot) {
+          selectionTrace.snapshot(source);
+        }
+      };
       const handleEditorScroll = () => {
         const now = Date.now();
         if (now - lastScrollTraceAt < 80) return;
         lastScrollTraceAt = now;
         traceScrollableSnapshot('editor-scroll', view.scrollDOM);
+      };
+      const handleEditorWheel = (event: WheelEvent) => {
+        traceInputEvent('editor-wheel', event);
+      };
+      const handleContentPointerDown = (event: PointerEvent) => {
+        traceInputEvent('content-pointerdown', event);
+      };
+      const handleContentPointerMove = (event: PointerEvent) => {
+        const now = Date.now();
+        if (event.buttons === 0 && now - lastPointerMoveTraceAt < 120) return;
+        if (event.buttons !== 0 && now - lastPointerMoveTraceAt < 60) return;
+        lastPointerMoveTraceAt = now;
+        traceInputEvent('content-pointermove', event, event.buttons !== 0);
+      };
+      const handleContentPointerUp = (event: PointerEvent) => {
+        traceInputEvent('content-pointerup', event);
+      };
+      const handleContentMouseUp = (event: MouseEvent) => {
+        traceInputEvent('content-mouseup', event);
       };
       const handleContentFocusIn = (event: FocusEvent) => {
         selectionTrace.event('content-focusin', {
@@ -3464,23 +3546,15 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         selectionTrace.snapshot('content-focusout');
       };
       const handleContentClick = (event: MouseEvent) => {
-        selectionTrace.event('content-click', {
-          x: event.clientX,
-          y: event.clientY,
-          detail: event.detail,
-          ctrlKey: event.ctrlKey,
-          metaKey: event.metaKey,
-          ...summarizeInteractionTarget(event.target),
-          currentSelection: {
-            from: view.state.selection.main.from,
-            to: view.state.selection.main.to,
-            head: view.state.selection.main.head,
-          },
-        });
-        selectionTrace.snapshot('content-click');
+        traceInputEvent('content-click', event);
       };
       view.contentDOM.addEventListener('mousedown', handleMouseDown);
       view.scrollDOM.addEventListener('scroll', handleEditorScroll, { passive: true });
+      view.scrollDOM.addEventListener('wheel', handleEditorWheel, { passive: true });
+      view.contentDOM.addEventListener('pointerdown', handleContentPointerDown);
+      view.contentDOM.addEventListener('pointermove', handleContentPointerMove);
+      ownerDoc.addEventListener('pointerup', handleContentPointerUp);
+      view.contentDOM.addEventListener('mouseup', handleContentMouseUp);
       view.contentDOM.addEventListener('focusin', handleContentFocusIn);
       view.contentDOM.addEventListener('focusout', handleContentFocusOut);
       view.contentDOM.addEventListener('click', handleContentClick);
@@ -3767,7 +3841,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
         view.contentDOM.removeEventListener('focusin', handleContentFocusIn);
         view.contentDOM.removeEventListener('focusout', handleContentFocusOut);
         view.contentDOM.removeEventListener('click', handleContentClick);
+        view.contentDOM.removeEventListener('pointerdown', handleContentPointerDown);
+        view.contentDOM.removeEventListener('pointermove', handleContentPointerMove);
+        ownerDoc.removeEventListener('pointerup', handleContentPointerUp);
+        view.contentDOM.removeEventListener('mouseup', handleContentMouseUp);
         view.scrollDOM.removeEventListener('scroll', handleEditorScroll);
+        view.scrollDOM.removeEventListener('wheel', handleEditorWheel);
         ownerDoc.removeEventListener('mousemove', handleMouseMove);
         ownerDoc.removeEventListener('mouseup', handleMouseUp);
         ownerDoc.removeEventListener('visibilitychange', handleOwnerDocVisibilityChange);

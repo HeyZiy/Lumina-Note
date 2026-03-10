@@ -281,6 +281,15 @@ export function Editor() {
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
+    let lastOuterPointerMoveTraceAt = 0;
+    const summarizePointerTarget = (target: EventTarget | null) => {
+      const element = target instanceof HTMLElement ? target : null;
+      return {
+        tag: element?.tagName.toLowerCase() || 'unknown',
+        className: element?.className || '',
+        text: (element?.textContent || '').slice(0, 120),
+      };
+    };
     const handleOuterScroll = () => {
       const now = Date.now();
       if (now - lastOuterScrollTraceAtRef.current < 80) return;
@@ -293,8 +302,81 @@ export function Editor() {
         estimatedLine: getLineFromScrollPosition(container),
       });
     };
+    const handleOuterWheel = (event: WheelEvent) => {
+      markEditorTrace('editor-outer-wheel', {
+        mode: editorMode,
+        x: event.clientX,
+        y: event.clientY,
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+        ...summarizePointerTarget(event.target),
+      });
+    };
+    const handleOuterPointerDown = (event: PointerEvent) => {
+      markEditorTrace('editor-outer-pointerdown', {
+        mode: editorMode,
+        x: event.clientX,
+        y: event.clientY,
+        button: event.button,
+        buttons: event.buttons,
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        ...summarizePointerTarget(event.target),
+      });
+    };
+    const handleOuterPointerMove = (event: PointerEvent) => {
+      const now = Date.now();
+      if (event.buttons === 0 && now - lastOuterPointerMoveTraceAt < 120) return;
+      if (event.buttons !== 0 && now - lastOuterPointerMoveTraceAt < 60) return;
+      lastOuterPointerMoveTraceAt = now;
+      markEditorTrace('editor-outer-pointermove', {
+        mode: editorMode,
+        x: event.clientX,
+        y: event.clientY,
+        buttons: event.buttons,
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        ...summarizePointerTarget(event.target),
+      });
+    };
+    const handleOuterPointerUp = (event: PointerEvent) => {
+      markEditorTrace('editor-outer-pointerup', {
+        mode: editorMode,
+        x: event.clientX,
+        y: event.clientY,
+        button: event.button,
+        buttons: event.buttons,
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        ...summarizePointerTarget(event.target),
+      });
+    };
+    const handleOuterClick = (event: MouseEvent) => {
+      markEditorTrace('editor-outer-click', {
+        mode: editorMode,
+        x: event.clientX,
+        y: event.clientY,
+        detail: event.detail,
+        button: event.button,
+        buttons: event.buttons,
+        ...summarizePointerTarget(event.target),
+      });
+    };
     container.addEventListener('scroll', handleOuterScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleOuterScroll);
+    container.addEventListener('wheel', handleOuterWheel, { passive: true });
+    container.addEventListener('pointerdown', handleOuterPointerDown);
+    container.addEventListener('pointermove', handleOuterPointerMove);
+    container.addEventListener('pointerup', handleOuterPointerUp);
+    container.addEventListener('click', handleOuterClick);
+    return () => {
+      container.removeEventListener('scroll', handleOuterScroll);
+      container.removeEventListener('wheel', handleOuterWheel);
+      container.removeEventListener('pointerdown', handleOuterPointerDown);
+      container.removeEventListener('pointermove', handleOuterPointerMove);
+      container.removeEventListener('pointerup', handleOuterPointerUp);
+      container.removeEventListener('click', handleOuterClick);
+    };
   }, [editorMode, getLineFromScrollPosition, markEditorTrace]);
 
   // 带保存滚动位置的模式切换
