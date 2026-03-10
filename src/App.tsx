@@ -27,6 +27,7 @@ import { PDFViewer } from "@/components/pdf";
 import { BrowserView } from "@/components/browser";
 import { FlashcardView } from "@/components/flashcard";
 import { CardFlowView } from "@/components/cardflow/CardFlowView";
+import { ImageManagerView } from "@/components/images/ImageManagerView";
 import { TypesettingPreviewPane } from "@/components/typesetting/TypesettingPreviewPane";
 import { TypesettingDocumentPane } from "@/components/typesetting/TypesettingDocumentPane";
 import { TypesettingExportHarness } from "@/components/typesetting/TypesettingExportHarness";
@@ -984,6 +985,11 @@ function App() {
             <div className="flex-1 flex flex-col overflow-hidden bg-background">
               <TabBar />
               <CardFlowView />
+            </div>
+          ) : activeTab?.type === "image-manager" ? (
+            <div className="flex-1 flex flex-col overflow-hidden bg-background">
+              <TabBar />
+              <ImageManagerView />
             </div>
           ) : activeTab?.type === "profile-preview" ? (
             <div className="flex-1 flex flex-col overflow-hidden bg-background">

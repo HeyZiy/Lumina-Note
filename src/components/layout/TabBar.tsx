@@ -2,7 +2,7 @@ import { useCallback, useState, useRef } from "react";
 import { useFileStore, Tab } from "@/stores/useFileStore";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import { useUIStore } from "@/stores/useUIStore";
-import { X, FileText, Network, Video, Database, Globe, Brain, Pin, User, Puzzle, Shapes } from "lucide-react";
+import { X, FileText, Network, Video, Database, Globe, Brain, Pin, User, Puzzle, Shapes, Images } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { reportOperationError } from "@/lib/reportError";
 import { useShallow } from "zustand/react/shallow";
@@ -79,6 +79,8 @@ function TabItem({
         <Puzzle size={12} className="shrink-0 text-cyan-500" />
       ) : tab.type === "flashcard" ? (
         <Brain size={12} className="shrink-0 text-purple-500" />
+      ) : tab.type === "image-manager" ? (
+        <Images size={12} className="shrink-0 text-emerald-500" />
       ) : (
         <FileText size={12} className="shrink-0 opacity-60" />
       )}

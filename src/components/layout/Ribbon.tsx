@@ -19,6 +19,7 @@ import {
   Globe,
   Brain,
   LayoutGrid,
+  Images,
   Star,
   Download,
   Loader2,
@@ -64,6 +65,7 @@ export function Ribbon({ showMacTrafficLightSafeArea = false, flushTopSpacing = 
     currentFile,
     openFlashcardTab,
     openCardFlowTab,
+    openImageManagerTab,
   } = useFileStore();
   const ribbonItems = usePluginUiStore((state) => state.ribbonItems);
   const { availableUpdate, hasUnreadUpdate, installTelemetry, currentVersion, isChecking } = useUpdateStore(
@@ -75,12 +77,24 @@ export function Ribbon({ showMacTrafficLightSafeArea = false, flushTopSpacing = 
       isChecking: state.isChecking,
     })),
   );
+  const imageManagerTitle =
+    (t.ribbon as typeof t.ribbon & { imageManager?: string }).imageManager ?? "Image Manager";
 
   // 当前激活的标签
   const activeTab = activeTabIndex >= 0 ? tabs[activeTabIndex] : null;
 
   // 归一化当前主视图所属的功能区，方便扩展
-  type RibbonSection = "ai" | "file" | "graph" | "video" | "database" | "browser" | "flashcard" | "cardflow" | "none";
+  type RibbonSection =
+    | "ai"
+    | "file"
+    | "graph"
+    | "video"
+    | "database"
+    | "browser"
+    | "flashcard"
+    | "cardflow"
+    | "image-manager"
+    | "none";
 
   let activeSection: RibbonSection = "none";
   if (activeTab?.type === "ai-chat") {
@@ -97,6 +111,8 @@ export function Ribbon({ showMacTrafficLightSafeArea = false, flushTopSpacing = 
     activeSection = "flashcard";
   } else if (activeTab?.type === "cardflow") {
     activeSection = "cardflow";
+  } else if (activeTab?.type === "image-manager") {
+    activeSection = "image-manager";
   } else if (activeTab?.type === "file" || currentFile) {
     // 没有特殊类型时，只要在编辑文件，就认为是文件编辑区
     activeSection = "file";
@@ -315,6 +331,19 @@ export function Ribbon({ showMacTrafficLightSafeArea = false, flushTopSpacing = 
             title={t.ribbon.cardView}
           >
             <LayoutGrid size={18} />
+          </button>
+
+          <button
+            onClick={openImageManagerTab}
+            className={cn(
+              "w-8 h-8 ui-icon-btn",
+              activeSection === "image-manager"
+                ? "bg-primary/12 text-primary border border-primary/25 hover:bg-primary/18"
+                : ""
+            )}
+            title={imageManagerTitle}
+          >
+            <Images size={18} />
           </button>
 
           {/* Graph */}

@@ -107,7 +107,7 @@ export function Sidebar() {
     }))
   );
   const { config: ragConfig, isIndexing: ragIsIndexing, indexStatus, rebuildIndex, cancelIndex } = useRAGStore();
-  const { setRightPanelTab, splitView } = useUIStore();
+  const { setLeftSidebarOpen, setRightPanelTab, splitView } = useUIStore();
   const { activePane, openSecondaryFile, openSecondaryPdf } = useSplitStore();
   const {
     favorites,
@@ -577,6 +577,22 @@ export function Sidebar() {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    const handleFocusPath = (event: Event) => {
+      const customEvent = event as CustomEvent<{ path?: string }>;
+      const targetPath = customEvent.detail?.path;
+      if (!targetPath) return;
+      setLeftSidebarOpen(true);
+      expandToPath(targetPath);
+      setSelectedPath(targetPath);
+    };
+
+    window.addEventListener("lumina-focus-file-tree-path", handleFocusPath as EventListener);
+    return () => {
+      window.removeEventListener("lumina-focus-file-tree-path", handleFocusPath as EventListener);
+    };
+  }, [expandToPath, setLeftSidebarOpen]);
 
   // Handle new file - VS Code 风格：先显示输入框，输入名称后再创建
   const handleNewFile = useCallback((parentPath?: string) => {

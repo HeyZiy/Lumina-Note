@@ -36,6 +36,7 @@ vi.mock("@/stores/useFileStore", () => ({
     currentFile: null,
     openFlashcardTab: vi.fn(),
     openCardFlowTab: vi.fn(),
+    openImageManagerTab: vi.fn(),
   }),
 }));
 
@@ -50,6 +51,7 @@ vi.mock("@/stores/useLocaleStore", () => ({
         aiChatMain: "AI Chat",
         fileEditor: "Files",
         cardView: "Card View",
+        imageManager: "Image Manager",
         database: "Database",
         flashcardReview: "Flashcards",
         plugins: "Plugins",
@@ -193,5 +195,11 @@ describe("Ribbon", () => {
 
     expect(screen.getByText("Update Modal")).toBeInTheDocument();
     expect(screen.queryByText("Settings Modal")).not.toBeInTheDocument();
+  });
+
+  it("renders the image manager ribbon entry", () => {
+    render(<Ribbon />);
+
+    expect(screen.getByRole("button", { name: "Image Manager" })).toBeInTheDocument();
   });
 });

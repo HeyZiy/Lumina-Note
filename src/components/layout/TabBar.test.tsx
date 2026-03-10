@@ -11,11 +11,14 @@ const closeOtherTabs = vi.fn();
 const closeAllTabs = vi.fn();
 const reorderTabs = vi.fn();
 const togglePinTab = vi.fn();
+const fileStoreState = vi.hoisted(() => ({
+  tabs: [{ id: "tab-1", name: "Daily Note.md", type: "file", isPinned: false, isDirty: false }],
+}));
 
 vi.mock("@/stores/useFileStore", () => ({
   useFileStore: (selector: (state: unknown) => unknown) =>
     selector({
-      tabs: [{ id: "tab-1", name: "Daily Note.md", type: "file", isPinned: false, isDirty: false }],
+      tabs: fileStoreState.tabs,
       activeTabIndex: 0,
       switchTab,
       closeTab,
@@ -65,6 +68,7 @@ describe("TabBar", () => {
   beforeEach(() => {
     macTopChromeEnabled.value = false;
     leftSidebarOpenState.value = true;
+    fileStoreState.tabs = [{ id: "tab-1", name: "Daily Note.md", type: "file", isPinned: false, isDirty: false }];
   });
 
   it("does not render macOS top actions outside macOS overlay mode", () => {
@@ -108,5 +112,16 @@ describe("TabBar", () => {
 
     expect(container.firstElementChild).toHaveClass("h-11");
     expect(container.firstElementChild).not.toHaveClass("min-h-[32px]");
+  });
+
+  it("shows the dedicated image manager tab icon", () => {
+    fileStoreState.tabs = [
+      { id: "tab-2", name: "Image Manager", type: "image-manager", isPinned: false, isDirty: false },
+    ];
+
+    const { container } = render(<TabBar />);
+
+    expect(container.querySelector("svg.lucide-images")).toBeTruthy();
+    expect(screen.getByText("Image Manager")).toBeInTheDocument();
   });
 });

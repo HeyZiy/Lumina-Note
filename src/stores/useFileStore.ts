@@ -33,6 +33,7 @@ export type TabType =
   | "webpage"
   | "flashcard"
   | "cardflow"
+  | "image-manager"
   | "profile-preview"
   | "plugin-view";
 
@@ -183,6 +184,7 @@ interface FileState {
   updateWebpageTab: (tabId: string, url?: string, title?: string) => void;
   openFlashcardTab: (deckId?: string) => void;
   openCardFlowTab: () => void;
+  openImageManagerTab: () => void;
   openPluginViewTab: (viewType: string, title: string, html: string) => void;
 
   // Undo/Redo actions
@@ -1579,6 +1581,53 @@ export const useFileStore = create<FileState>()(
         };
 
         updatedTabs.push(cardFlowTab);
+
+        set({
+          tabs: updatedTabs,
+          activeTabIndex: updatedTabs.length - 1,
+          currentFile: null,
+          currentContent: "",
+          isDirty: false,
+          undoStack: [],
+          redoStack: [],
+          lastSavedContent: "",
+        });
+      },
+
+      openImageManagerTab: () => {
+        const t = getCurrentTranslations();
+        const { tabs, activeTabIndex, currentContent, isDirty, undoStack, redoStack } = get();
+        const imageManagerTitle = (t.views as typeof t.views & { imageManager?: string }).imageManager ?? "Image Manager";
+
+        const existingIndex = tabs.findIndex((tab) => tab.type === "image-manager");
+        if (existingIndex !== -1) {
+          get().switchTab(existingIndex);
+          return;
+        }
+
+        let updatedTabs = [...tabs];
+        if (activeTabIndex >= 0 && tabs[activeTabIndex]) {
+          updatedTabs[activeTabIndex] = {
+            ...updatedTabs[activeTabIndex],
+            content: currentContent,
+            isDirty,
+            undoStack,
+            redoStack,
+          };
+        }
+
+        const imageManagerTab: Tab = {
+          id: "__image_manager__",
+          type: "image-manager",
+          path: "",
+          name: imageManagerTitle,
+          content: "",
+          isDirty: false,
+          undoStack: [],
+          redoStack: [],
+        };
+
+        updatedTabs.push(imageManagerTab);
 
         set({
           tabs: updatedTabs,
