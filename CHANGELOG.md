@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-03-11
+
+### 修复
+- 模式切换现在只保留阅读视口，不再跨模式保留旧光标和选区状态，减少 reading 与 live/source 切换后异常大范围选中的问题
+- 模式切换时会清理编辑器 DOM 选区和焦点，降低 Tauri WebKit 下旧锚点残留导致的单击跳选风险
+
 ## [1.0.8] - 2026-03-10
 
 ### 修复
