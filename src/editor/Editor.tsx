@@ -103,6 +103,8 @@ export function Editor() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const lastOuterScrollTraceAtRef = useRef(0);
+  const editorScrollFadeTimerRef = useRef<number | null>(null);
+  const [isEditorScrollActive, setIsEditorScrollActive] = useState(false);
 
   const getLineFromScrollPosition = useCallback((container: HTMLElement): number => {
     const scrollTop = container.scrollTop;
@@ -150,6 +152,14 @@ export function Editor() {
       };
     };
     const handleOuterScroll = () => {
+      setIsEditorScrollActive(true);
+      if (editorScrollFadeTimerRef.current !== null) {
+        window.clearTimeout(editorScrollFadeTimerRef.current);
+      }
+      editorScrollFadeTimerRef.current = window.setTimeout(() => {
+        setIsEditorScrollActive(false);
+        editorScrollFadeTimerRef.current = null;
+      }, 720);
       const now = Date.now();
       if (now - lastOuterScrollTraceAtRef.current < 80) return;
       lastOuterScrollTraceAtRef.current = now;
@@ -229,6 +239,10 @@ export function Editor() {
     container.addEventListener('pointerup', handleOuterPointerUp);
     container.addEventListener('click', handleOuterClick);
     return () => {
+      if (editorScrollFadeTimerRef.current !== null) {
+        window.clearTimeout(editorScrollFadeTimerRef.current);
+        editorScrollFadeTimerRef.current = null;
+      }
       container.removeEventListener('scroll', handleOuterScroll);
       container.removeEventListener('wheel', handleOuterWheel);
       container.removeEventListener('pointerdown', handleOuterPointerDown);
@@ -487,7 +501,13 @@ export function Editor() {
             )
           )}
 
-          <div ref={scrollContainerRef} className="h-full overflow-auto">
+          <div
+            ref={scrollContainerRef}
+            className={cn(
+              "editor-scroll-shell h-full overflow-auto",
+              isEditorScrollActive && "is-scroll-active"
+            )}
+          >
             {/* Selection Toolbar - Add to Chat */}
             <SelectionToolbar containerRef={scrollContainerRef} />
             {/* Selection Context Menu - Right Click */}
