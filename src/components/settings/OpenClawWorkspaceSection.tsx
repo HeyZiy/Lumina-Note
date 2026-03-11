@@ -15,6 +15,7 @@ import {
 import { join } from "@/lib/path";
 import { exists } from "@/lib/tauri";
 import { reportOperationError } from "@/lib/reportError";
+import { resolveMountedOpenClawWorkspacePath } from "./openClawWorkspaceSectionModel";
 
 function formatCheckedAt(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
@@ -72,8 +73,14 @@ export function OpenClawWorkspaceSection() {
   const [gatewayEndpointDraft, setGatewayEndpointDraft] = useState("");
   const [mountedPathDraft, setMountedPathDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const targetWorkspacePath = resolveMountedOpenClawWorkspacePath(
+    mountedPathDraft,
+    mountedWorkspacePath,
+  );
+  const hasSelectedWorkspacePath = targetWorkspacePath !== null;
+  const shouldShowSnapshot = hasSelectedWorkspacePath && snapshot !== null;
 
-  const visibleError = actionError ?? lastError ?? snapshot?.error ?? null;
+  const visibleError = actionError ?? lastError ?? (shouldShowSnapshot ? snapshot?.error ?? null : null);
 
   useEffect(() => {
     const next = attachment?.gateway.endpoint ?? "";
@@ -125,7 +132,10 @@ export function OpenClawWorkspaceSection() {
 
   const handleAttach = async () => {
     if (!vaultPath) return;
-    const targetWorkspacePath = mountedPathDraft.trim() || vaultPath;
+    if (!targetWorkspacePath) {
+      setActionError(t.settingsModal.openClawPathRequiredDesc);
+      return;
+    }
     try {
       setActionError(null);
       await attachWorkspace({
@@ -188,10 +198,14 @@ export function OpenClawWorkspaceSection() {
   };
 
   const handleRescan = async () => {
+    if (!targetWorkspacePath) {
+      setActionError(t.settingsModal.openClawPathRequiredDesc);
+      return;
+    }
     try {
       setActionError(null);
       await refreshWorkspace(vaultPath, {
-        workspacePath: mountedPathDraft.trim() || mountedWorkspacePath || vaultPath || undefined,
+        workspacePath: targetWorkspacePath,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -203,7 +217,7 @@ export function OpenClawWorkspaceSection() {
         level: "warning",
         context: {
           vaultPath,
-          workspacePath: mountedPathDraft.trim() || mountedWorkspacePath || null,
+          workspacePath: targetWorkspacePath,
         },
       });
     }
@@ -231,7 +245,7 @@ export function OpenClawWorkspaceSection() {
           <button
             type="button"
             onClick={() => void handleRescan()}
-            disabled={!vaultPath || isRefreshing || !integrationEnabled}
+            disabled={!vaultPath || isRefreshing || !integrationEnabled || !hasSelectedWorkspacePath}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background/60 px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
             <RefreshCw size={12} className={isRefreshing ? "animate-spin" : undefined} />
@@ -286,7 +300,16 @@ export function OpenClawWorkspaceSection() {
             </p>
           </div>
 
-          {snapshot && (
+          {!hasSelectedWorkspacePath && (
+            <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+              <div className="font-medium text-foreground">
+                {t.settingsModal.openClawPathRequiredTitle}
+              </div>
+              <p className="mt-1">{t.settingsModal.openClawPathRequiredDesc}</p>
+            </div>
+          )}
+
+          {shouldShowSnapshot && (
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={`rounded-full px-2 py-1 text-[11px] font-medium ${
@@ -314,7 +337,7 @@ export function OpenClawWorkspaceSection() {
           </div>
           )}
 
-          {snapshot && (
+          {shouldShowSnapshot && (
           <div className="space-y-1 text-sm">
             <div>
               <span className="font-medium">{t.settingsModal.openClawWorkspacePath}</span>
@@ -410,7 +433,8 @@ export function OpenClawWorkspaceSection() {
               <button
                 type="button"
                 onClick={() => void handleAttach()}
-                className="rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                disabled={!hasSelectedWorkspacePath}
+                className="rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
               >
                 {t.settingsModal.openClawAttach}
               </button>
@@ -427,7 +451,7 @@ export function OpenClawWorkspaceSection() {
             <button
               type="button"
               onClick={() => void handleOpenAgents()}
-              disabled={!snapshot || snapshot.status !== "detected"}
+              disabled={!shouldShowSnapshot || snapshot.status !== "detected"}
               className="rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
             >
               {t.settingsModal.openClawOpenAgents}
@@ -435,7 +459,7 @@ export function OpenClawWorkspaceSection() {
             <button
               type="button"
               onClick={() => void handleOpenTodayMemory()}
-              disabled={!snapshot || snapshot.status === "error"}
+              disabled={!shouldShowSnapshot || snapshot.status === "error"}
               className="rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
             >
               {t.settingsModal.openClawOpenTodayMemory}

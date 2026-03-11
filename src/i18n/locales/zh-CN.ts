@@ -1150,6 +1150,8 @@ export default {
     openClawMountedWorkspace: '挂载的 OpenClaw 工作区',
     openClawMountedWorkspacePlaceholder: '/Users/name/.openclaw/workspace',
     openClawMountedWorkspaceHint: '把一个外部 OpenClaw 工作区路径挂到当前 Lumina 工作区上。',
+    openClawPathRequiredTitle: '尚未选择 OpenClaw 工作区',
+    openClawPathRequiredDesc: '先选择一个外部 OpenClaw 工作区路径，再进行检测或附着。',
     openClawPickWorkspace: '选择文件夹',
     openClawMatchedFiles: '已匹配 memory 文件',
     openClawMissingFiles: '缺失的必需文件',

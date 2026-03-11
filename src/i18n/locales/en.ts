@@ -1149,6 +1149,8 @@ export default {
     openClawMountedWorkspace: 'Mounted OpenClaw workspace',
     openClawMountedWorkspacePlaceholder: '/Users/name/.openclaw/workspace',
     openClawMountedWorkspaceHint: 'Attach an external OpenClaw workspace path to the current Lumina workspace.',
+    openClawPathRequiredTitle: 'No OpenClaw workspace selected',
+    openClawPathRequiredDesc: 'Choose an external OpenClaw workspace path before rescanning or attaching.',
     openClawPickWorkspace: 'Choose folder',
     openClawMatchedFiles: 'Matched memory files',
     openClawMissingFiles: 'Missing required files',

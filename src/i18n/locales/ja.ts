@@ -1044,6 +1044,8 @@ export default {
     openClawMountedWorkspace: 'Mounted OpenClaw workspace',
     openClawMountedWorkspacePlaceholder: '/Users/name/.openclaw/workspace',
     openClawMountedWorkspaceHint: 'Attach an external OpenClaw workspace path to the current Lumina workspace.',
+    openClawPathRequiredTitle: 'OpenClaw ワークスペースが未選択です',
+    openClawPathRequiredDesc: '再検出または接続の前に、外部 OpenClaw ワークスペースのパスを選択してください。',
     openClawPickWorkspace: 'Choose folder',
     openClawMatchedFiles: 'Matched memory files',
     openClawMissingFiles: 'Missing required files',
