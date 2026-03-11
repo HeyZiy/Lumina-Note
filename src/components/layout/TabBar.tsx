@@ -21,6 +21,7 @@ interface TabItemProps {
   dropPosition: 'left' | 'right' | null;
   displayName: string;
   onSelect: () => void;
+  onDoubleClick: () => void;
   onClose: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onMouseDown: (e: React.MouseEvent, index: number) => void;
@@ -35,6 +36,7 @@ function TabItem({
   dropPosition,
   displayName,
   onSelect,
+  onDoubleClick,
   onClose,
   onContextMenu,
   onMouseDown,
@@ -54,6 +56,7 @@ function TabItem({
         isDropTarget && dropPosition === 'right' && "border-r-2 border-r-primary"
       )}
       onClick={onSelect}
+      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       onMouseDown={(e) => onMouseDown(e, index)}
     >
@@ -84,7 +87,7 @@ function TabItem({
       ) : (
         <FileText size={12} className="shrink-0 opacity-60" />
       )}
-      <span className="truncate max-w-[120px]">{displayName}</span>
+      <span className={cn("truncate max-w-[120px]", tab.isPreview && "italic")}>{displayName}</span>
       {tab.isPinned && (
         <Pin size={10} className="shrink-0 text-primary rotate-45" />
       )}
@@ -120,7 +123,7 @@ interface ContextMenuState {
 
 export function TabBar() {
   const { t } = useLocaleStore();
-  const { tabs, activeTabIndex, switchTab, closeTab, closeOtherTabs, closeAllTabs, togglePinTab } =
+  const { tabs, activeTabIndex, switchTab, closeTab, closeOtherTabs, closeAllTabs, togglePinTab, promotePreviewTab } =
     useFileStore(
       useShallow((state) => ({
         tabs: state.tabs,
@@ -130,6 +133,7 @@ export function TabBar() {
         closeOtherTabs: state.closeOtherTabs,
         closeAllTabs: state.closeAllTabs,
         togglePinTab: state.togglePinTab,
+        promotePreviewTab: state.promotePreviewTab,
       })),
     );
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -243,6 +247,7 @@ export function TabBar() {
                     : tab.name
               }
               onSelect={() => switchTab(index)}
+              onDoubleClick={() => tab.isPreview && promotePreviewTab(tab.id)}
               onClose={(e) => handleClose(e, index)}
               onContextMenu={(e) => handleContextMenu(e, index)}
               onMouseDown={handleTabMouseDown}
