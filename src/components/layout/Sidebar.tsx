@@ -88,6 +88,7 @@ export function Sidebar() {
     activeTabIndex,
     moveFileToFolder,
     moveFolderToFolder,
+    promotePreviewTab,
   } = useFileStore(
     useShallow((state) => ({
       vaultPath: state.vaultPath,
@@ -104,6 +105,7 @@ export function Sidebar() {
       activeTabIndex: state.activeTabIndex,
       moveFileToFolder: state.moveFileToFolder,
       moveFolderToFolder: state.moveFolderToFolder,
+      promotePreviewTab: state.promotePreviewTab,
     }))
   );
   const { config: ragConfig, isIndexing: ragIsIndexing, indexStatus, rebuildIndex, cancelIndex } = useRAGStore();
@@ -788,36 +790,44 @@ export function Sidebar() {
     });
   }, []);
 
-  // 处理选中（单击高亮）
+  // 处理选中（单击：preview 模式打开）
   const handleSelect = useCallback((entry: FileEntry) => {
     setSelectedPath(entry.path);
     if (!entry.is_dir) {
       const name = entry.name.toLowerCase();
-      // 检查是否是数据库文件
       if (name.endsWith('.db.json')) {
-        // 从文件名提取数据库 ID（去掉 .db.json 后缀）
         const dbId = entry.name.replace('.db.json', '');
-        const dbName = dbId; // 可以后续从文件内容读取真实名称
+        const dbName = dbId;
         openDatabaseTab(dbId, dbName);
       } else if (name.endsWith(".excalidraw.json") || name.endsWith(".diagram.json") || name.endsWith(".drawio.json")) {
         openDiagramTab(entry.path);
       } else if (name.endsWith('.pdf')) {
-        // PDF 文件 - 根据活动面板打开
         if (splitView && activePane === 'secondary') {
           openSecondaryPdf(entry.path);
         } else {
           openPDFTab(entry.path);
         }
       } else {
-        // Markdown 文件 - 根据活动面板打开
         if (splitView && activePane === 'secondary') {
           openSecondaryFile(entry.path);
         } else {
-          openFile(entry.path);
+          openFile(entry.path, { preview: true });
         }
       }
     }
   }, [openFile, openDatabaseTab, openPDFTab, openDiagramTab, splitView, activePane, openSecondaryFile, openSecondaryPdf]);
+
+  // 处理双击（永久打开）
+  const handlePermanentOpen = useCallback((entry: FileEntry) => {
+    if (entry.is_dir) return;
+    const name = entry.name.toLowerCase();
+    if (name.endsWith('.db.json') || name.endsWith(".excalidraw.json") || name.endsWith(".diagram.json") || name.endsWith(".drawio.json") || name.endsWith('.pdf')) {
+      return; // single-click already opens these as permanent
+    }
+    if (splitView && activePane === 'secondary') return;
+    // Promote the current preview tab (Option B: first click already opened as preview)
+    promotePreviewTab();
+  }, [splitView, activePane, promotePreviewTab]);
 
   // 点击空白区域：选中根目录（VS Code 行为）
   const handleTreeBackgroundClick = useCallback((e: React.MouseEvent) => {
@@ -1187,6 +1197,7 @@ export function Sidebar() {
               currentFile={currentFile}
               selectedPath={selectedPath}
               onSelect={handleSelect}
+              onPermanentOpen={handlePermanentOpen}
               onContextMenu={handleContextMenu}
               level={0}
               renamingPath={renamingPath}
@@ -1372,6 +1383,7 @@ interface FileTreeItemProps {
   currentFile: string | null;
   selectedPath: string | null;
   onSelect: (entry: FileEntry) => void;
+  onPermanentOpen: (entry: FileEntry) => void;
   onContextMenu: (e: React.MouseEvent, entry: FileEntry) => void;
   level: number;
   renamingPath: string | null;
@@ -1393,7 +1405,8 @@ function FileTreeItem({
   entry, 
   currentFile,
   selectedPath,
-  onSelect, 
+  onSelect,
+  onPermanentOpen,
   onContextMenu,
   level,
   renamingPath,
@@ -1583,6 +1596,7 @@ function FileTreeItem({
                 currentFile={currentFile}
                 selectedPath={selectedPath}
                 onSelect={onSelect}
+                onPermanentOpen={onPermanentOpen}
                 onContextMenu={onContextMenu}
                 level={level + 1}
                 renamingPath={renamingPath}
@@ -1670,6 +1684,7 @@ function FileTreeItem({
       data-file-tree-item="true"
       onMouseDown={handleMouseDown}
       onClick={() => onSelect(entry)}
+      onDoubleClick={() => onPermanentOpen(entry)}
       onContextMenu={(e) => onContextMenu(e, entry)}
       className={cn(
         "w-full flex items-center gap-1.5 py-1.5 pr-2 transition-colors text-sm cursor-grab select-none rounded-ui-sm border border-transparent",
