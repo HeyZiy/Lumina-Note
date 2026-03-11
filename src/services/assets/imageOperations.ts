@@ -1,5 +1,5 @@
 import type { FileEntry } from "@/lib/tauri";
-import { createDir, readFile, renameFile, saveFile } from "@/lib/tauri";
+import { createDir, exists, readFile, renameFile, saveFile } from "@/lib/tauri";
 import { basename, dirname, extname } from "@/lib/path";
 import { useFileStore } from "@/stores/useFileStore";
 
@@ -83,8 +83,14 @@ export const previewImageAssetChanges = async (
   fileTree: FileEntry[],
   changes: AssetPathChange[],
   readNoteFn: typeof readFile = readFile,
+  existsFn: typeof exists = exists,
 ): Promise<ImageAssetPreview> => {
   validateImageAssetPaths(changes);
+  for (const change of changes) {
+    if (await existsFn(change.to)) {
+      throw new Error(`Target already exists: ${basename(change.to)}`);
+    }
+  }
   const noteSources = await loadWorkspaceNoteSources(fileTree, readNoteFn);
   const noteUpdates = planAssetReferenceUpdates(noteSources, changes);
   return {
@@ -171,9 +177,10 @@ export const previewImageRename = async (
   imagePath: string,
   nextName: string,
   readNoteFn: typeof readFile = readFile,
+  existsFn: typeof exists = exists,
 ): Promise<ImageAssetPreview> => {
   const targetPath = buildImageRenameTargetPath(imagePath, nextName);
-  return previewImageAssetChanges(fileTree, [{ from: normalizePath(imagePath), to: targetPath }], readNoteFn);
+  return previewImageAssetChanges(fileTree, [{ from: normalizePath(imagePath), to: targetPath }], readNoteFn, existsFn);
 };
 
 export const previewImageMove = async (
@@ -181,8 +188,9 @@ export const previewImageMove = async (
   imagePaths: string[],
   targetFolder: string,
   readNoteFn: typeof readFile = readFile,
+  existsFn: typeof exists = exists,
 ): Promise<ImageAssetPreview> =>
-  previewImageAssetChanges(fileTree, buildImageMoveChanges(imagePaths, targetFolder), readNoteFn);
+  previewImageAssetChanges(fileTree, buildImageMoveChanges(imagePaths, targetFolder), readNoteFn, existsFn);
 
 export const executeImageRename = async (
   fileTree: FileEntry[],

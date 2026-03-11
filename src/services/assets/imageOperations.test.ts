@@ -7,6 +7,7 @@ import {
   buildImageMoveChanges,
   buildImageRenameTargetPath,
   executeImageAssetChanges,
+  previewImageAssetChanges,
   previewImageRename,
   validateImageAssetPaths,
 } from "./imageOperations";
@@ -80,6 +81,7 @@ describe("imageOperations", () => {
       vi.fn(async () => {
         throw new Error("disk read should be skipped for the active note");
       }),
+      vi.fn(async () => false),
     );
 
     expect(preview.noteUpdates).toHaveLength(1);
@@ -149,5 +151,26 @@ describe("imageOperations", () => {
     expect(() =>
       validateImageAssetPaths([{ from: "/vault/notes/a.md", to: "/vault/media/a.png" }]),
     ).toThrow("Only image files can be managed here");
+  });
+
+  it("rejects rename when target already exists on disk", async () => {
+    await expect(
+      previewImageAssetChanges(
+        [makeDir("/vault/assets", [makeFile("/vault/assets/hero.png"), makeFile("/vault/assets/cover.png")])],
+        [{ from: "/vault/assets/hero.png", to: "/vault/assets/cover.png" }],
+        vi.fn(async () => ""),
+        vi.fn(async () => true),
+      ),
+    ).rejects.toThrow("Target already exists: cover.png");
+  });
+
+  it("allows rename when target does not exist on disk", async () => {
+    const preview = await previewImageAssetChanges(
+      [makeDir("/vault/assets", [makeFile("/vault/assets/hero.png")])],
+      [{ from: "/vault/assets/hero.png", to: "/vault/assets/cover.png" }],
+      vi.fn(async () => ""),
+      vi.fn(async () => false),
+    );
+    expect(preview.changes).toEqual([{ from: "/vault/assets/hero.png", to: "/vault/assets/cover.png" }]);
   });
 });
