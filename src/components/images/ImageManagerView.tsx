@@ -834,7 +834,7 @@ export function ImageManagerView() {
               detailPanelOpen ? "w-[320px] opacity-100" : "w-0 opacity-0",
             )}
           >
-            <div className="h-full w-[320px] overflow-hidden">
+            <div className="flex h-full w-[320px] flex-col overflow-hidden">
               {currentSelection.length > 1 ? (
                 <MultiSelectionPanel images={currentSelection} onMove={() => openMoveDialog(currentSelection.map((image) => image.path))} />
               ) : primaryAsset ? (
@@ -1176,7 +1176,7 @@ function ImageDetailPanel({
         <h2 className="mt-2 text-lg font-semibold">{image.name}</h2>
         <p className="mt-1 break-all text-xs text-muted-foreground">{image.relativePath}</p>
       </div>
-      <div className="flex-1 overflow-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
         <ImageThumbnail
           path={image.path}
           alt={image.name}
@@ -1278,7 +1278,7 @@ function MultiSelectionPanel({ images, onMove }: { images: ImageAssetRecord[]; o
           {t.imageManager.moveSelectedSafely}
         </button>
       </div>
-      <div className="mt-5 space-y-2 overflow-auto">
+      <div className="mt-5 min-h-0 flex-1 space-y-2 overflow-auto">
         {images.map((image) => (
           <div key={image.path} className="rounded-xl border border-border/60 bg-background px-3 py-3">
             <div className="truncate text-sm font-medium">{image.name}</div>
