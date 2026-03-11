@@ -252,6 +252,7 @@ body.resizing iframe[data-codex-iframe="true"] {
   .db-toggle-btn:active:not(:disabled) {
     transform: scale(0.98);
   }
+
   .db-toggle-btn[data-active="true"] {
     @apply border-border bg-background text-foreground;
   }
