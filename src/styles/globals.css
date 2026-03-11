@@ -146,7 +146,7 @@ body.resizing iframe[data-codex-iframe="true"] {
     @apply -translate-y-[1px] shadow-ui-float border-border/80;
   }
   .ui-card-hover:active {
-    transform: translateY(0);
+    @apply translate-y-0;
   }
 
   .ui-kbd {
