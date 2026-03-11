@@ -1945,5 +1945,8 @@ Requirements:
     confirmMove: 'Confirm move',
     // Misc
     unknown: 'Unknown',
+    collapsePanel: 'Collapse detail panel',
+    expandPanel: 'Expand detail panel',
+    statsSummary: '{total} images · {orphans} orphans · {totalSize}',
   },
 };

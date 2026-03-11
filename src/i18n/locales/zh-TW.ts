@@ -1945,5 +1945,8 @@ export default {
     confirmMove: '確認移動',
     // 雜項
     unknown: '未知',
+    collapsePanel: '收起詳情面板',
+    expandPanel: '展開詳情面板',
+    statsSummary: '{total} 張圖片 · {orphans} 張孤立 · {totalSize}',
   },
 };

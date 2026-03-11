@@ -1945,5 +1945,8 @@ JSONのみを出力：{"type": "<chat|search|create|edit|organize|flashcard|comp
     confirmMove: '移動を確定',
     // その他
     unknown: '不明',
+    collapsePanel: '詳細パネルを閉じる',
+    expandPanel: '詳細パネルを開く',
+    statsSummary: '{total} 枚 · {orphans} 件孤立 · {totalSize}',
   },
 };

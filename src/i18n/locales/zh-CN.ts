@@ -1946,5 +1946,8 @@ export default {
     confirmMove: '确认移动',
     // 杂项
     unknown: '未知',
+    collapsePanel: '收起详情面板',
+    expandPanel: '展开详情面板',
+    statsSummary: '{total} 张图片 · {orphans} 张孤立 · {totalSize}',
   },
 };

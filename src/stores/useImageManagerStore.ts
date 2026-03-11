@@ -15,8 +15,10 @@ interface ImageManagerState {
   searchQuery: string;
   sortBy: ImageManagerSortBy;
   sortOrder: ImageManagerSortOrder;
+  detailPanelOpen: boolean;
   selectedPaths: string[];
   focusedPath: string | null;
+  setDetailPanelOpen: (open: boolean) => void;
   setViewMode: (mode: ImageManagerViewMode) => void;
   setGroupMode: (mode: ImageManagerGroupMode) => void;
   setStatusFilter: (filter: ImageManagerStatusFilter) => void;
@@ -43,8 +45,10 @@ export const useImageManagerStore = create<ImageManagerState>()(
       searchQuery: "",
       sortBy: "modified",
       sortOrder: "desc",
+      detailPanelOpen: true,
       selectedPaths: [],
       focusedPath: null,
+      setDetailPanelOpen: (detailPanelOpen) => set({ detailPanelOpen }),
       setViewMode: (viewMode) => set({ viewMode }),
       setGroupMode: (groupMode) => set({ groupMode }),
       setStatusFilter: (statusFilter) => set({ statusFilter }),
@@ -97,6 +101,7 @@ export const useImageManagerStore = create<ImageManagerState>()(
         searchQuery: state.searchQuery,
         sortBy: state.sortBy,
         sortOrder: state.sortOrder,
+        detailPanelOpen: state.detailPanelOpen,
       }),
     },
   ),
