@@ -849,7 +849,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
   const handleMouseUp = () => {
     // 如果点击了节点且没有拖拽，则打开笔记（文件夹节点不打开）
     if (clickedNodeRef.current && !hasDragged.current && !clickedNodeRef.current.isFolder) {
-      openFile(clickedNodeRef.current.path);
+      openFile(clickedNodeRef.current.path, { preview: true });
     }
 
     if (isDraggingNode.current && draggedNodeId.current) {
@@ -921,7 +921,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
 
   const handleNodeClick = (node: GraphNode) => {
     if (!node.isFolder) {
-      openFile(node.path);
+      openFile(node.path, { preview: true });
     }
   };
 
@@ -1187,7 +1187,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
               {!contextMenu.node.isFolder && (
                 <button
                   onClick={() => {
-                    openFile(contextMenu.node.path);
+                    openFile(contextMenu.node.path, { preview: true });
                     setContextMenu(null);
                   }}
                   className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent flex items-center gap-2"
@@ -1224,7 +1224,7 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
                       key={node.id}
                       onClick={() => {
                         setSelectedNode(node);
-                        openFile(node.path);
+                        openFile(node.path, { preview: true });
                       }}
                       className="text-xs px-2 py-0.5 bg-muted rounded hover:bg-primary/20 text-muted-foreground hover:text-primary transition-colors"
                     >

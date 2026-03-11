@@ -474,7 +474,7 @@ export function LocalGraph({ className = "" }: LocalGraphProps) {
     });
 
     if (clicked && !clicked.isCurrent) {
-      openFile(clicked.path);
+      openFile(clicked.path, { preview: true });
     }
   };
 
