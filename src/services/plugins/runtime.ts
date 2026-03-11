@@ -1190,7 +1190,7 @@ return exported(api, plugin);
         getActiveFile: () => useFileStore.getState().currentFile,
         openFile: async (path: string) => {
           requirePermission("workspace:open");
-          await useFileStore.getState().openFile(resolvePluginPath(path), true, false);
+          await useFileStore.getState().openFile(resolvePluginPath(path));
         },
         readFile: async (path: string) => {
           requirePermission("vault:read");
