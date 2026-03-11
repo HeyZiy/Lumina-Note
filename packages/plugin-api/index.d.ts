@@ -81,6 +81,31 @@ export interface OpenClawWorkspaceSnapshot {
   error: string | null;
 }
 
+export interface OpenClawGatewaySettings {
+  enabled: boolean;
+  endpoint: string | null;
+}
+
+export interface OpenClawConflictState {
+  workspacePath: string;
+  status: "idle" | "warning";
+  files: string[];
+  lastDetectedAt: string | null;
+  message: string | null;
+}
+
+export interface OpenClawWorkspaceAttachment {
+  kind: "openclaw";
+  workspacePath: string;
+  status: "attached" | "unavailable";
+  attachedAt: string;
+  lastValidatedAt: string | null;
+  detectedFiles: string[];
+  detectedFolders: string[];
+  gateway: OpenClawGatewaySettings;
+  unavailableReason?: string | null;
+}
+
 export interface LuminaPluginApi {
   meta: LuminaPluginMeta;
   logger: {
@@ -184,8 +209,10 @@ export interface LuminaPluginApi {
     openFile: (path: string) => Promise<void>;
     readFile: (path: string) => Promise<string>;
     writeFile: (path: string, content: string) => Promise<void>;
-    getOpenClawAttachment: () => OpenClawWorkspaceSnapshot | null;
-    attachOpenClawWorkspace: () => Promise<OpenClawWorkspaceSnapshot>;
+    getOpenClawAttachment: () => OpenClawWorkspaceAttachment | null;
+    attachOpenClawWorkspace: (input?: {
+      gateway?: Partial<OpenClawWorkspaceAttachment["gateway"]>;
+    }) => OpenClawWorkspaceAttachment;
     detachOpenClawWorkspace: () => void;
     registerPanel: (input: { id: string; title: string; html: string }) => () => void;
     registerTabType: (input: {

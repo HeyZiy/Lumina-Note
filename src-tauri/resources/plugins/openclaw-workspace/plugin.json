@@ -6,6 +6,7 @@
   "entry": "index.js",
   "permissions": [
     "commands:register",
+    "editor:read",
     "events:subscribe",
     "ui:decorate",
     "ui:notify",
@@ -13,7 +14,8 @@
     "workspace:open",
     "workspace:tab",
     "vault:list",
-    "vault:read"
+    "vault:read",
+    "vault:write"
   ],
   "enabled_by_default": true
 }

@@ -50,6 +50,7 @@ import { ProfilePreview } from "@/components/profile/ProfilePreview";
 import { DevProfiler } from "@/perf/DevProfiler";
 import type { FsChangePayload } from "@/lib/fsChange";
 import { usePluginStore } from "@/stores/usePluginStore";
+import { useOpenClawWorkspaceStore } from "@/stores/useOpenClawWorkspaceStore";
 import { pluginRuntime } from "@/services/plugins/runtime";
 import { applyTheme, getThemeById } from "@/config/themePlugin";
 import { PluginViewPane } from "@/components/plugins/PluginViewPane";
@@ -367,7 +368,7 @@ function App() {
 
     const setupWatcher = async () => {
       try {
-        const { handleFsChangeEvent } = await import("@/lib/fsChange");
+        const { getFsChangePath, handleFsChangeEvent } = await import("@/lib/fsChange");
         const { reloadFileIfOpen } = useFileStore.getState();
         const { reloadSecondaryIfOpen } = (await import("@/stores/useSplitStore")).useSplitStore.getState();
 
@@ -384,6 +385,21 @@ function App() {
           // 防抖：500ms 内多次变化只刷新一次
           if (debounceTimer) clearTimeout(debounceTimer);
           debounceTimer = setTimeout(() => {
+            const changedPath = getFsChangePath(event.payload);
+            if (changedPath) {
+              const fileStore = useFileStore.getState();
+              const dirtyPaths = fileStore.tabs
+                .filter((tab) => tab.type === "file" && tab.isDirty)
+                .map((tab) => tab.path);
+              if (fileStore.currentFile && fileStore.isDirty) {
+                dirtyPaths.push(fileStore.currentFile);
+              }
+              useOpenClawWorkspaceStore.getState().recordExternalChange(
+                vaultPath,
+                [changedPath],
+                dirtyPaths,
+              );
+            }
             refreshFileTree();
             handleFsChangeEvent(event.payload, (path) => {
               reloadFileIfOpen(path, { skipIfDirty: true });

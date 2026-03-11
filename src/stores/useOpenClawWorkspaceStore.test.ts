@@ -16,8 +16,10 @@ describe("useOpenClawWorkspaceStore", () => {
     inspectMock.mockReset();
     inspectTreeMock.mockReset();
     useOpenClawWorkspaceStore.setState({
+      integrationEnabled: true,
       snapshotsByPath: {},
       attachmentsByPath: {},
+      conflictsByPath: {},
       activeWorkspacePath: null,
       isRefreshing: false,
       lastError: null,
@@ -129,5 +131,53 @@ describe("useOpenClawWorkspaceStore", () => {
     expect(useOpenClawWorkspaceStore.getState().getAttachment("/tmp/openclaw")?.status).toBe(
       "unavailable",
     );
+  });
+
+  it("stores gateway metadata updates for an attached workspace", () => {
+    useOpenClawWorkspaceStore.getState().attachWorkspace({
+      workspacePath: "/tmp/openclaw",
+    });
+
+    const updated = useOpenClawWorkspaceStore.getState().updateGateway("/tmp/openclaw", {
+      enabled: true,
+      endpoint: "ws://127.0.0.1:8042",
+    });
+
+    expect(updated?.gateway.enabled).toBe(true);
+    expect(updated?.gateway.endpoint).toBe("ws://127.0.0.1:8042");
+  });
+
+  it("records a warning when external OpenClaw changes hit dirty Lumina files", () => {
+    useOpenClawWorkspaceStore.getState().attachWorkspace({
+      workspacePath: "/tmp/openclaw",
+    });
+
+    useOpenClawWorkspaceStore.getState().recordExternalChange(
+      "/tmp/openclaw",
+      ["/tmp/openclaw/AGENTS.md", "/tmp/openclaw/output/report.md"],
+      ["/tmp/openclaw/AGENTS.md"],
+    );
+
+    expect(useOpenClawWorkspaceStore.getState().getConflictState("/tmp/openclaw")).toMatchObject({
+      workspacePath: "/tmp/openclaw",
+      status: "warning",
+      files: ["/tmp/openclaw/AGENTS.md"],
+    });
+  });
+
+  it("disables attachment access when integration is turned off", () => {
+    useOpenClawWorkspaceStore.getState().attachWorkspace({
+      workspacePath: "/tmp/openclaw",
+    });
+
+    useOpenClawWorkspaceStore.getState().setIntegrationEnabled(false);
+
+    expect(useOpenClawWorkspaceStore.getState().getAttachment("/tmp/openclaw")).toBeNull();
+    expect(useOpenClawWorkspaceStore.getState().getSnapshot("/tmp/openclaw")).toBeNull();
+    expect(() =>
+      useOpenClawWorkspaceStore.getState().attachWorkspace({
+        workspacePath: "/tmp/openclaw",
+      }),
+    ).toThrow("OpenClaw integration is disabled.");
   });
 });
