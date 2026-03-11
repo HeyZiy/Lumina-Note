@@ -184,7 +184,7 @@ body.resizing iframe[data-codex-iframe="true"] {
       color var(--ui-motion-feedback) var(--ui-motion-ease),
       transform var(--ui-motion-feedback) var(--ui-motion-ease);
   }
-  .ui-icon-btn:active {
+  .ui-icon-btn:active:not(:disabled) {
     transform: scale(0.97);
   }
 
@@ -224,7 +224,7 @@ body.resizing iframe[data-codex-iframe="true"] {
     transition-duration: var(--db-motion-feedback);
     transition-timing-function: var(--db-motion-ease);
   }
-  .db-icon-btn:active {
+  .db-icon-btn:active:not(:disabled) {
     transform: scale(0.97);
   }
 
@@ -249,7 +249,7 @@ body.resizing iframe[data-codex-iframe="true"] {
     transition-timing-function: var(--db-motion-ease);
   }
 
-  .db-toggle-btn:active {
+  .db-toggle-btn:active:not(:disabled) {
     transform: scale(0.98);
   }
   .db-toggle-btn[data-active="true"] {
@@ -315,11 +315,11 @@ body.resizing iframe[data-codex-iframe="true"] {
     transition-duration: 1ms !important;
     animation-duration: 1ms !important;
   }
-  .ui-icon-btn:active,
+  .ui-icon-btn:active:not(:disabled),
   .ui-card-hover:active,
-  .db-icon-btn:active,
+  .db-icon-btn:active:not(:disabled),
   .db-action-btn:active:not(:disabled),
-  .db-toggle-btn:active,
+  .db-toggle-btn:active:not(:disabled),
   .mode-switcher-btn:active {
     transform: none;
   }
