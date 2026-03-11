@@ -25,11 +25,18 @@ interface SearchMatch {
 interface GlobalSearchProps {
   isOpen: boolean;
   onClose: () => void;
+  request?: {
+    query?: string;
+    pathPrefixes?: string[];
+    scopeLabel?: string;
+  } | null;
 }
 
-export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
+export function GlobalSearch({ isOpen, onClose, request }: GlobalSearchProps) {
   const { t } = useLocaleStore();
   const [query, setQuery] = useState("");
+  const [pathPrefixes, setPathPrefixes] = useState<string[]>([]);
+  const [scopeLabel, setScopeLabel] = useState<string | null>(null);
   const [replaceQuery, setReplaceQuery] = useState("");
   const [showReplace, setShowReplace] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -60,12 +67,14 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     if (isOpen) {
       searchRunIdRef.current += 1;
       fileLinesCacheRef.current.clear();
-      setQuery("");
+      setQuery(request?.query ?? "");
+      setPathPrefixes(request?.pathPrefixes ?? []);
+      setScopeLabel(request?.scopeLabel ?? null);
       setReplaceQuery("");
       setResults([]);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [isOpen]);
+  }, [isOpen, request]);
 
   // Flatten file tree to get all file paths
   const allFiles = useMemo(() => {
@@ -152,9 +161,26 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const performSearch = useCallback(async () => {
     const runId = ++searchRunIdRef.current;
     const trimmedQuery = query.trim();
-    if (!trimmedQuery) {
+    const normalizedPrefixes = pathPrefixes
+      .map((path) => getCacheKey(path))
+      .filter((path) => path.length > 0);
+    const scopedFiles = normalizedPrefixes.length
+      ? allFiles.filter((file) => {
+          const normalizedPath = getCacheKey(file.path);
+          return normalizedPrefixes.some((prefix) => normalizedPath.startsWith(prefix));
+        })
+      : allFiles;
+
+    if (!trimmedQuery && normalizedPrefixes.length === 0) {
       setIsSearching(false);
       setResults([]);
+      setExpandedFiles(new Set());
+      return;
+    }
+
+    if (!trimmedQuery && normalizedPrefixes.length > 0) {
+      setIsSearching(false);
+      setResults(scopedFiles.map((file) => ({ path: file.path, name: file.name, matches: [] })));
       setExpandedFiles(new Set());
       return;
     }
@@ -186,7 +212,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       }
 
       // Search through all files
-      for (const file of allFiles) {
+      for (const file of scopedFiles) {
         if (runId !== searchRunIdRef.current) {
           return;
         }
@@ -259,7 +285,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         setIsSearching(false);
       }
     }
-  }, [query, allFiles, useRegex, caseSensitive, getCacheKey]);
+  }, [query, pathPrefixes, allFiles, useRegex, caseSensitive, getCacheKey]);
 
   // Debounced search
   useEffect(() => {
@@ -306,6 +332,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
 
   // Total match count
   const totalMatches = results.reduce((sum, r) => sum + r.matches.length, 0);
+  const isScopeOnlyView = pathPrefixes.length > 0 && !query.trim();
 
   if (!isOpen) return null;
 
@@ -398,6 +425,22 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
               >
                 .*
               </button>
+              {scopeLabel && (
+                <>
+                  <span className="rounded-md bg-primary/20 px-2.5 py-1 text-primary">
+                    {t.globalSearch.scopeLabel.replace("{scope}", scopeLabel)}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setPathPrefixes([]);
+                      setScopeLabel(null);
+                    }}
+                    className="px-2.5 py-1 rounded-md transition-colors hover:bg-muted text-muted-foreground"
+                  >
+                    {t.globalSearch.clearScope}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -408,9 +451,9 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                 <Loader2 size={20} className="animate-spin mr-2" />
                 {t.globalSearch.searching}
               </div>
-            ) : query && results.length === 0 ? (
+            ) : (query.trim() || pathPrefixes.length > 0) && results.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
-                {t.globalSearch.noMatches}
+                {isScopeOnlyView ? t.globalSearch.noFilesInScope : t.globalSearch.noMatches}
               </div>
             ) : (
               <div className="py-2">
@@ -418,7 +461,13 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                   <div key={result.path} className="border-b border-border last:border-b-0">
                     {/* File header */}
                     <button
-                      onClick={() => toggleFile(result.path)}
+                      onClick={() => {
+                        if (result.matches.length === 0) {
+                          void openFile(result.path);
+                          return;
+                        }
+                        toggleFile(result.path);
+                      }}
                       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted transition-colors"
                     >
                       {expandedFiles.has(result.path) ? (
@@ -431,12 +480,12 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                         {result.name}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {result.matches.length}
+                        {result.matches.length > 0 ? result.matches.length : getCacheKey(result.path)}
                       </span>
                     </button>
 
                   {/* Matches */}
-                  {expandedFiles.has(result.path) && (
+                  {result.matches.length > 0 && expandedFiles.has(result.path) && (
                     <div className="bg-muted/30">
                       {result.matches.slice(0, 10).map((match, idx) => {
                         // Highlight the matched text

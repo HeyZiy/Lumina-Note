@@ -75,8 +75,14 @@ export default {
     openClawTodayMemory: '今日 memory',
     openClawRecentMemory: '最近 memory',
     openClawNoRecentMemory: '暂无最近的 daily memory 文件',
+    openClawPlans: '计划材料',
+    openClawNoPlans: '暂未识别到计划文件',
+    openClawBridgeNotes: 'Bridge 笔记',
     openClawMemoryFolder: 'memory 目录',
     openClawArtifacts: '{count} 个产物',
+    openClawSearchMemory: '查看 memories',
+    openClawSearchPlans: '查看 plans',
+    openClawSearchArtifacts: '查看 artifacts',
   },
 
   favorites: {
@@ -109,8 +115,13 @@ export default {
     openClawTodayMemory: '打开今日 memory',
     openClawRecentMemory: '最近 daily memory',
     openClawNoRecentMemory: '还没有最近的 daily memory 文件。',
+    openClawPlans: '计划材料',
+    openClawNoPlans: '暂未识别到计划文件。',
     openClawArtifactRoots: '产物根目录',
     openClawNoArtifacts: '暂未识别到产物目录。',
+    openClawSearchMemory: '查看 memories',
+    openClawSearchPlans: '查看 plans',
+    openClawSearchArtifacts: '查看 artifacts',
   },
   
   // 编辑器
@@ -417,6 +428,9 @@ export default {
     moreMatches: '...还有 {count} 个匹配',
     summary: '{files} 个文件，{matches} 个匹配',
     shortcutHint: 'Ctrl+Shift+F 打开全局搜索',
+    scopeLabel: '范围：{scope}',
+    clearScope: '清除范围',
+    noFilesInScope: '这个筛选视图下没有文件',
   },
   
   // 图谱

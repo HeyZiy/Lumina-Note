@@ -75,8 +75,14 @@ export default {
     openClawTodayMemory: 'Today memory',
     openClawRecentMemory: 'Recent memory',
     openClawNoRecentMemory: 'No recent daily memory files',
+    openClawPlans: 'Plans',
+    openClawNoPlans: 'No plan files detected',
+    openClawBridgeNotes: 'Bridge notes',
     openClawMemoryFolder: 'memory',
     openClawArtifacts: '{count} artifacts',
+    openClawSearchMemory: 'View memories',
+    openClawSearchPlans: 'View plans',
+    openClawSearchArtifacts: 'View artifacts',
   },
 
   favorites: {
@@ -109,8 +115,13 @@ export default {
     openClawTodayMemory: 'Open today memory',
     openClawRecentMemory: 'Recent daily memory',
     openClawNoRecentMemory: 'No recent daily memory files found yet.',
+    openClawPlans: 'Plan materials',
+    openClawNoPlans: 'No plan files detected yet.',
     openClawArtifactRoots: 'Artifact roots',
     openClawNoArtifacts: 'No artifact roots detected yet.',
+    openClawSearchMemory: 'View memories',
+    openClawSearchPlans: 'View plans',
+    openClawSearchArtifacts: 'View artifacts',
   },
   
   // Editor
@@ -417,6 +428,9 @@ export default {
     moreMatches: '...and {count} more matches',
     summary: '{files} files, {matches} matches',
     shortcutHint: 'Ctrl+Shift+F to open global search',
+    scopeLabel: 'Scope: {scope}',
+    clearScope: 'Clear scope',
+    noFilesInScope: 'No files found in this filtered view',
   },
   
   // Graph

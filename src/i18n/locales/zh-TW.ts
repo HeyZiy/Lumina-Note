@@ -75,8 +75,14 @@ export default {
     openClawTodayMemory: '今日 memory',
     openClawRecentMemory: '最近 memory',
     openClawNoRecentMemory: '尚無最近的 daily memory 檔案',
+    openClawPlans: '計畫材料',
+    openClawNoPlans: '尚未識別到計畫檔案',
+    openClawBridgeNotes: 'Bridge 筆記',
     openClawMemoryFolder: 'memory 目錄',
     openClawArtifacts: '{count} 個產物',
+    openClawSearchMemory: '查看 memories',
+    openClawSearchPlans: '查看 plans',
+    openClawSearchArtifacts: '查看 artifacts',
   },
 
   favorites: {
@@ -109,8 +115,13 @@ export default {
     openClawTodayMemory: '打開今日 memory',
     openClawRecentMemory: '最近 daily memory',
     openClawNoRecentMemory: '目前還沒有 recent daily memory 檔案。',
+    openClawPlans: '計畫材料',
+    openClawNoPlans: '尚未識別到計畫檔案。',
     openClawArtifactRoots: '產物根目錄',
     openClawNoArtifacts: '尚未識別到產物目錄。',
+    openClawSearchMemory: '查看 memories',
+    openClawSearchPlans: '查看 plans',
+    openClawSearchArtifacts: '查看 artifacts',
   },
   
   // 編輯器
@@ -417,6 +428,9 @@ export default {
     moreMatches: '...還有 {count} 個匹配',
     summary: '{files} 個檔案，{matches} 個匹配',
     shortcutHint: 'Ctrl+Shift+F 開啟全域搜尋',
+    scopeLabel: '範圍：{scope}',
+    clearScope: '清除範圍',
+    noFilesInScope: '這個篩選視圖下沒有檔案',
   },
   
   // 圖譜

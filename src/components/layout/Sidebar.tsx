@@ -630,6 +630,22 @@ export function Sidebar() {
     () => openClawSnapshot?.artifactDirectoryPaths ?? [],
     [openClawSnapshot?.artifactDirectoryPaths],
   );
+  const openClawPlanEntries = useMemo(
+    () => openClawSnapshot?.planFilePaths.slice(0, 4) ?? [],
+    [openClawSnapshot?.planFilePaths],
+  );
+  const openClawBridgeEntries = useMemo(
+    () => openClawSnapshot?.bridgeNotePaths.slice(0, 2) ?? [],
+    [openClawSnapshot?.bridgeNotePaths],
+  );
+
+  const openFilteredView = useCallback((scopeLabel: string, pathPrefixes: string[]) => {
+    window.dispatchEvent(
+      new CustomEvent("open-global-search", {
+        detail: { scopeLabel, pathPrefixes },
+      }),
+    );
+  }, []);
 
   useEffect(() => {
     const handleFocusPath = (event: Event) => {
@@ -1087,6 +1103,52 @@ export function Sidebar() {
             )}
           </div>
 
+          <div className="mb-2 space-y-1">
+            <div className="text-[11px] font-medium text-muted-foreground">
+              {t.sidebar.openClawPlans}
+            </div>
+            {openClawPlanEntries.length === 0 ? (
+              <div className="text-[11px] text-muted-foreground">{t.sidebar.openClawNoPlans}</div>
+            ) : (
+              openClawPlanEntries.map((path) => (
+                <button
+                  key={path}
+                  type="button"
+                  onClick={() => void openFile(path)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-md px-2 py-1 text-[11px] hover:bg-accent",
+                    currentFile === path ? "bg-accent text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  <span className="truncate">{getFileName(path)}</span>
+                  <FileText className="h-3 w-3 shrink-0" />
+                </button>
+              ))
+            )}
+          </div>
+
+          {openClawBridgeEntries.length > 0 && (
+            <div className="mb-2 space-y-1">
+              <div className="text-[11px] font-medium text-muted-foreground">
+                {t.sidebar.openClawBridgeNotes}
+              </div>
+              {openClawBridgeEntries.map((path) => (
+                <button
+                  key={path}
+                  type="button"
+                  onClick={() => void openFile(path)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-md px-2 py-1 text-[11px] hover:bg-accent",
+                    currentFile === path ? "bg-accent text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  <span className="truncate">{getFileName(path)}</span>
+                  <FileText className="h-3 w-3 shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-1">
             {openClawSnapshot.memoryDirectoryPath && (
               <button
@@ -1107,6 +1169,41 @@ export function Sidebar() {
                 {getFileName(path)}
               </button>
             ))}
+            {openClawSnapshot.memoryDirectoryPath && (
+              <button
+                type="button"
+                onClick={() =>
+                  openFilteredView(t.sidebar.openClawSearchMemory, [
+                    openClawSnapshot.memoryDirectoryPath as string,
+                  ])
+                }
+                className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {t.sidebar.openClawSearchMemory}
+              </button>
+            )}
+            {openClawSnapshot.planDirectoryPaths.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  openFilteredView(t.sidebar.openClawSearchPlans, openClawSnapshot.planDirectoryPaths)
+                }
+                className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {t.sidebar.openClawSearchPlans}
+              </button>
+            )}
+            {openClawArtifactDirectories.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  openFilteredView(t.sidebar.openClawSearchArtifacts, openClawArtifactDirectories)
+                }
+                className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {t.sidebar.openClawSearchArtifacts}
+              </button>
+            )}
           </div>
         </div>
       )}

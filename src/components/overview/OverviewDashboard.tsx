@@ -15,7 +15,16 @@ export function OverviewDashboard() {
   const snapshot = useOpenClawWorkspaceStore((state) => state.getSnapshot(vaultPath));
   const attachment = useOpenClawWorkspaceStore((state) => state.getAttachment(vaultPath));
   const visibleRecentMemory = snapshot?.recentMemoryPaths.slice(0, 4) ?? [];
+  const visiblePlanFiles = snapshot?.planFilePaths.slice(0, 4) ?? [];
   const visibleArtifactDirectories = snapshot?.artifactDirectoryPaths.slice(0, 3) ?? [];
+
+  const openFilteredView = (scopeLabel: string, pathPrefixes: string[]) => {
+    window.dispatchEvent(
+      new CustomEvent("open-global-search", {
+        detail: { scopeLabel, pathPrefixes },
+      }),
+    );
+  };
 
   return (
     <div className="flex-1 ui-app-bg overflow-auto">
@@ -81,7 +90,7 @@ export function OverviewDashboard() {
                 </CardHeader>
                 <CardContent className="pt-3">
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-                    <div className="md:col-span-4 space-y-2">
+                    <div className="md:col-span-3 space-y-2">
                       <div className="text-sm font-medium text-foreground">
                         {attachment ? t.overview.openClawAttached : t.overview.openClawDetected}
                       </div>
@@ -104,9 +113,52 @@ export function OverviewDashboard() {
                           {t.overview.openClawTodayMemory}
                         </button>
                       </div>
+                      <div className="flex flex-wrap gap-2">
+                        {snapshot.memoryDirectoryPath && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openFilteredView(t.overview.openClawSearchMemory, [
+                                snapshot.memoryDirectoryPath as string,
+                              ])
+                            }
+                            className="rounded-md border border-border bg-background/70 px-3 py-1.5 text-xs text-foreground hover:bg-accent"
+                          >
+                            {t.overview.openClawSearchMemory}
+                          </button>
+                        )}
+                        {snapshot.planDirectoryPaths.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openFilteredView(
+                                t.overview.openClawSearchPlans,
+                                snapshot.planDirectoryPaths,
+                              )
+                            }
+                            className="rounded-md border border-border bg-background/70 px-3 py-1.5 text-xs text-foreground hover:bg-accent"
+                          >
+                            {t.overview.openClawSearchPlans}
+                          </button>
+                        )}
+                        {snapshot.artifactDirectoryPaths.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openFilteredView(
+                                t.overview.openClawSearchArtifacts,
+                                snapshot.artifactDirectoryPaths,
+                              )
+                            }
+                            className="rounded-md border border-border bg-background/70 px-3 py-1.5 text-xs text-foreground hover:bg-accent"
+                          >
+                            {t.overview.openClawSearchArtifacts}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="md:col-span-4 space-y-2">
+                    <div className="md:col-span-3 space-y-2">
                       <div className="text-sm font-medium text-foreground">{t.overview.openClawRecentMemory}</div>
                       {visibleRecentMemory.length === 0 ? (
                         <div className="text-sm text-muted-foreground">{t.overview.openClawNoRecentMemory}</div>
@@ -125,7 +177,26 @@ export function OverviewDashboard() {
                       )}
                     </div>
 
-                    <div className="md:col-span-4 space-y-2">
+                    <div className="md:col-span-3 space-y-2">
+                      <div className="text-sm font-medium text-foreground">{t.overview.openClawPlans}</div>
+                      {visiblePlanFiles.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">{t.overview.openClawNoPlans}</div>
+                      ) : (
+                        visiblePlanFiles.map((path) => (
+                          <button
+                            key={path}
+                            type="button"
+                            onClick={() => void openFile(path)}
+                            className="flex w-full items-center justify-between rounded-md border border-border bg-background/60 px-3 py-2 text-left text-sm text-foreground hover:bg-accent"
+                          >
+                            <span className="truncate">{getFileName(path)}</span>
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="md:col-span-3 space-y-2">
                       <div className="text-sm font-medium text-foreground">{t.overview.openClawArtifactRoots}</div>
                       {visibleArtifactDirectories.length === 0 ? (
                         <div className="text-sm text-muted-foreground">{t.overview.openClawNoArtifacts}</div>

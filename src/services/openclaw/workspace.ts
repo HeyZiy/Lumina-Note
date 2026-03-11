@@ -12,6 +12,13 @@ export const OPENCLAW_OPTIONAL_ROOT_FILES = [
   "MEMORY.md",
 ] as const;
 export const OPENCLAW_SPECIAL_DIRECTORIES = ["memory", "skills", "canvas", "output"] as const;
+export const OPENCLAW_ARTIFACT_PATH_PREFIXES = ["output/", "canvas/", "tmp/", "artifacts/"] as const;
+export const OPENCLAW_CONVENTIONAL_PLAN_DIRECTORIES = [
+  "plans",
+  "docs/plans",
+  ".openclaw/plans",
+  "output/plans",
+] as const;
 
 export type OpenClawWorkspaceStatus = "detected" | "not-detected" | "error";
 
@@ -26,9 +33,12 @@ export interface OpenClawWorkspaceSnapshot {
   memoryDirectoryPath: string | null;
   todayMemoryPath: string;
   artifactDirectoryPaths: string[];
+  planDirectoryPaths: string[];
   recentMemoryPaths: string[];
+  planFilePaths: string[];
   artifactFilePaths: string[];
   artifactFileCount: number;
+  bridgeNotePaths: string[];
   editablePriorityFiles: string[];
   indexingScope: "shared-workspace";
   gatewayEnabled: boolean;
@@ -64,6 +74,55 @@ export async function ensureOpenClawTodayMemoryNote(
   return notePath;
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
+function toRelativeWorkspacePath(workspacePath: string, path: string): string {
+  const normalizedWorkspace = normalizePath(workspacePath).replace(/\/+$/, "");
+  const normalizedPath = normalizePath(path);
+  if (!normalizedWorkspace) {
+    return normalizedPath.replace(/^\/+/, "");
+  }
+  if (normalizedPath === normalizedWorkspace) {
+    return "";
+  }
+  if (normalizedPath.startsWith(`${normalizedWorkspace}/`)) {
+    return normalizedPath.slice(normalizedWorkspace.length + 1);
+  }
+  return normalizedPath.replace(/^\/+/, "");
+}
+
+function isArtifactRelativePath(relativePath: string): boolean {
+  if (isPlanRelativePath(relativePath)) {
+    return false;
+  }
+  return OPENCLAW_ARTIFACT_PATH_PREFIXES.some((prefix) => relativePath.startsWith(prefix));
+}
+
+function getArtifactDirectoryForRelativePath(workspacePath: string, relativePath: string): string | null {
+  if (relativePath.startsWith("tmp/docs/")) {
+    return join(workspacePath, "tmp", "docs");
+  }
+  const topLevelSegment = relativePath.split("/")[0];
+  if (!topLevelSegment || !["output", "canvas", "tmp", "artifacts"].includes(topLevelSegment)) {
+    return null;
+  }
+  return join(workspacePath, topLevelSegment);
+}
+
+function isPlanRelativePath(relativePath: string): boolean {
+  if (!relativePath) return false;
+  return relativePath.split("/").includes("plans");
+}
+
+function isBridgeRelativePath(relativePath: string): boolean {
+  return (
+    relativePath.startsWith(".lumina/openclaw-bridge-") &&
+    relativePath.toLowerCase().endsWith(".md")
+  );
+}
+
 export async function inspectOpenClawWorkspace(
   workspacePath: string,
 ): Promise<OpenClawWorkspaceSnapshot> {
@@ -88,6 +147,12 @@ export async function inspectOpenClawWorkspace(
         exists: await exists(join(workspacePath, name)),
       })),
     );
+    const planChecks = await Promise.all(
+      OPENCLAW_CONVENTIONAL_PLAN_DIRECTORIES.map(async (relativePath) => ({
+        relativePath,
+        exists: await exists(join(workspacePath, relativePath)),
+      })),
+    );
 
     const matchedRequiredFiles = requiredChecks.filter((entry) => entry.exists).map((entry) => entry.name);
     const matchedOptionalFiles = optionalChecks.filter((entry) => entry.exists).map((entry) => entry.name);
@@ -99,9 +164,21 @@ export async function inspectOpenClawWorkspace(
     const memoryDirectoryPath = matchedDirectories.includes("memory")
       ? join(workspacePath, "memory")
       : null;
-    const artifactDirectoryPaths = matchedDirectories
-      .filter((name) => name !== "memory" && name !== "skills")
-      .map((name) => join(workspacePath, name));
+    const artifactDirectoryPaths = Array.from(
+      new Set([
+        ...matchedDirectories
+          .filter((name) => name !== "memory" && name !== "skills")
+          .map((name) => join(workspacePath, name)),
+        ...(await Promise.all(
+          ["tmp", "artifacts"].map(async (name) =>
+            (await exists(join(workspacePath, name))) ? join(workspacePath, name) : null,
+          ),
+        )).filter((path): path is string => Boolean(path)),
+      ]),
+    );
+    const planDirectoryPaths = planChecks
+      .filter((entry) => entry.exists)
+      .map((entry) => join(workspacePath, entry.relativePath));
 
     return {
       workspacePath,
@@ -114,9 +191,12 @@ export async function inspectOpenClawWorkspace(
       memoryDirectoryPath,
       todayMemoryPath,
       artifactDirectoryPaths,
+      planDirectoryPaths,
       recentMemoryPaths: [],
+      planFilePaths: [],
       artifactFilePaths: [],
       artifactFileCount: 0,
+      bridgeNotePaths: [],
       editablePriorityFiles,
       indexingScope: "shared-workspace",
       gatewayEnabled: false,
@@ -134,9 +214,12 @@ export async function inspectOpenClawWorkspace(
       memoryDirectoryPath: null,
       todayMemoryPath,
       artifactDirectoryPaths: [],
+      planDirectoryPaths: [],
       recentMemoryPaths: [],
+      planFilePaths: [],
       artifactFilePaths: [],
       artifactFileCount: 0,
+      bridgeNotePaths: [],
       editablePriorityFiles: [],
       indexingScope: "shared-workspace",
       gatewayEnabled: false,
@@ -165,9 +248,11 @@ export function inspectOpenClawWorkspaceTree(
     ? join(workspacePath, "memory")
     : null;
   const allFilePaths: string[] = [];
+  const allDirectoryPaths: string[] = [];
   const collectFilePaths = (entries: FileEntry[]) => {
     for (const entry of entries) {
       if (entry.is_dir) {
+        allDirectoryPaths.push(entry.path);
         if (Array.isArray(entry.children)) {
           collectFilePaths(entry.children);
         }
@@ -178,23 +263,48 @@ export function inspectOpenClawWorkspaceTree(
   };
   collectFilePaths(fileTree);
 
+  const relativeFilePaths = allFilePaths.map((path) => ({
+    absolutePath: path,
+    relativePath: toRelativeWorkspacePath(workspacePath, path),
+  }));
+  const relativeDirectoryPaths = allDirectoryPaths.map((path) => ({
+    absolutePath: path,
+    relativePath: toRelativeWorkspacePath(workspacePath, path),
+  }));
+
   const recentMemoryPaths = allFilePaths
     .filter((path) => path.startsWith(join(workspacePath, "memory")) && path.toLowerCase().endsWith(".md"))
     .sort((left, right) => right.localeCompare(left))
     .slice(0, 8);
-  const artifactFilePaths = allFilePaths
-    .filter((path) => {
-      const normalized = path.replace(/\\/g, "/");
-      const workspaceRoot = workspacePath.replace(/\\/g, "/");
-      return (
-        normalized.startsWith(`${workspaceRoot}/output/`) ||
-        normalized.startsWith(`${workspaceRoot}/canvas/`) ||
-        normalized.startsWith(`${workspaceRoot}/tmp/`) ||
-        normalized.startsWith(`${workspaceRoot}/artifacts/`)
-      );
-    })
+  const artifactFilePaths = relativeFilePaths
+    .filter(({ relativePath }) => isArtifactRelativePath(relativePath))
+    .map(({ absolutePath }) => absolutePath)
     .sort((left, right) => left.localeCompare(right))
     .slice(0, 12);
+  const artifactDirectoryPaths = Array.from(
+    new Set(
+      relativeFilePaths
+        .map(({ relativePath }) => getArtifactDirectoryForRelativePath(workspacePath, relativePath))
+        .filter((path): path is string => Boolean(path)),
+    ),
+  );
+  const planDirectoryPaths = Array.from(
+    new Set(
+      relativeDirectoryPaths
+        .filter(({ relativePath }) => isPlanRelativePath(relativePath))
+        .map(({ absolutePath }) => absolutePath),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+  const planFilePaths = relativeFilePaths
+    .filter(({ relativePath }) => isPlanRelativePath(relativePath))
+    .map(({ absolutePath }) => absolutePath)
+    .sort((left, right) => left.localeCompare(right))
+    .slice(0, 8);
+  const bridgeNotePaths = relativeFilePaths
+    .filter(({ relativePath }) => isBridgeRelativePath(relativePath))
+    .map(({ absolutePath }) => absolutePath)
+    .sort((left, right) => right.localeCompare(left))
+    .slice(0, 8);
 
   return {
     workspacePath,
@@ -206,21 +316,14 @@ export function inspectOpenClawWorkspaceTree(
     missingRequiredFiles,
     memoryDirectoryPath,
     todayMemoryPath: buildOpenClawTodayMemoryPath(workspacePath),
-    artifactDirectoryPaths: matchedDirectories
-      .filter((name) => name !== "memory" && name !== "skills")
-      .map((name) => join(workspacePath, name)),
+    artifactDirectoryPaths,
+    planDirectoryPaths,
     recentMemoryPaths,
+    planFilePaths,
     artifactFilePaths,
-    artifactFileCount: allFilePaths.filter((path) => {
-      const normalized = path.replace(/\\/g, "/");
-      const workspaceRoot = workspacePath.replace(/\\/g, "/");
-      return (
-        normalized.startsWith(`${workspaceRoot}/output/`) ||
-        normalized.startsWith(`${workspaceRoot}/canvas/`) ||
-        normalized.startsWith(`${workspaceRoot}/tmp/`) ||
-        normalized.startsWith(`${workspaceRoot}/artifacts/`)
-      );
-    }).length,
+    artifactFileCount: relativeFilePaths.filter(({ relativePath }) => isArtifactRelativePath(relativePath))
+      .length,
+    bridgeNotePaths,
     editablePriorityFiles: [...matchedRequiredFiles, ...matchedOptionalFiles],
     indexingScope: "shared-workspace",
     gatewayEnabled: false,

@@ -205,6 +205,12 @@ interface BrowserNewTabEventPayload {
   url: string;
 }
 
+interface GlobalSearchRequest {
+  query?: string;
+  pathPrefixes?: string[];
+  scopeLabel?: string;
+}
+
 // 避免在 React 严格模式和 HMR 下重复注册浏览器新标签事件监听
 let browserNewTabListenerRegistered = false;
 
@@ -257,6 +263,7 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>("command");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchRequest, setSearchRequest] = useState<GlobalSearchRequest | null>(null);
   const [isLoadingVault, setIsLoadingVault] = useState(false);
   const [createDbOpen, setCreateDbOpen] = useState(false);
   const [evalPanelOpen, setEvalPanelOpen] = useState(false);
@@ -719,6 +726,7 @@ function App() {
       // Ctrl+Shift+F: Global search
       if (isCtrl && e.shiftKey && e.key === "F") {
         e.preventDefault();
+        setSearchRequest(null);
         setSearchOpen(true);
         return;
       }
@@ -778,7 +786,11 @@ function App() {
   // Listen for window-level entry actions dispatched from top-level chrome
   useEffect(() => {
     const onOpenVault = () => handleOpenVault();
-    const onOpenSearch = () => setSearchOpen(true);
+    const onOpenSearch = (event: Event) => {
+      const customEvent = event as CustomEvent<GlobalSearchRequest | undefined>;
+      setSearchRequest(customEvent.detail ?? null);
+      setSearchOpen(true);
+    };
     const onOpenCommandPalette = () => setPaletteOpen(true);
     const onOpenCreateDb = () => setCreateDbOpen(true);
     window.addEventListener("open-vault", onOpenVault);
@@ -1089,6 +1101,7 @@ function App() {
       <GlobalSearch
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
+        request={searchRequest}
       />
 
       {/* Create Database Dialog */}

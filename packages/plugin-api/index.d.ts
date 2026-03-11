@@ -75,6 +75,12 @@ export interface OpenClawWorkspaceSnapshot {
   memoryDirectoryPath: string | null;
   todayMemoryPath: string;
   artifactDirectoryPaths: string[];
+  planDirectoryPaths: string[];
+  recentMemoryPaths: string[];
+  planFilePaths: string[];
+  artifactFilePaths: string[];
+  artifactFileCount: number;
+  bridgeNotePaths: string[];
   editablePriorityFiles: string[];
   indexingScope: "shared-workspace";
   gatewayEnabled: boolean;

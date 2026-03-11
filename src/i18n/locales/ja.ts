@@ -75,8 +75,14 @@ export default {
     openClawTodayMemory: '今日の memory',
     openClawRecentMemory: '最近の memory',
     openClawNoRecentMemory: '最近の daily memory はまだありません',
+    openClawPlans: 'Plans',
+    openClawNoPlans: 'plan ファイルはまだありません',
+    openClawBridgeNotes: 'Bridge notes',
     openClawMemoryFolder: 'memory フォルダ',
     openClawArtifacts: 'artifacts {count}',
+    openClawSearchMemory: 'View memories',
+    openClawSearchPlans: 'View plans',
+    openClawSearchArtifacts: 'View artifacts',
   },
 
   favorites: {
@@ -109,8 +115,13 @@ export default {
     openClawTodayMemory: '今日の memory を開く',
     openClawRecentMemory: '最近の daily memory',
     openClawNoRecentMemory: '最近の daily memory ファイルはまだありません。',
+    openClawPlans: 'Plan materials',
+    openClawNoPlans: 'plan ファイルはまだありません。',
     openClawArtifactRoots: 'artifact ルート',
     openClawNoArtifacts: 'artifact ルートはまだ検出されていません。',
+    openClawSearchMemory: 'View memories',
+    openClawSearchPlans: 'View plans',
+    openClawSearchArtifacts: 'View artifacts',
   },
   
   // エディター
@@ -417,6 +428,9 @@ export default {
     moreMatches: '...ほか {count} 件',
     summary: '{files} ファイル、{matches} 件',
     shortcutHint: 'Ctrl+Shift+F で全体検索',
+    scopeLabel: 'Scope: {scope}',
+    clearScope: 'Clear scope',
+    noFilesInScope: 'この filtered view にファイルはありません',
   },
   
   // グラフ

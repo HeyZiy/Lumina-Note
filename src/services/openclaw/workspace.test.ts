@@ -44,6 +44,7 @@ describe("openclaw workspace helpers", () => {
     expect(snapshot.matchedRequiredFiles).toEqual(["AGENTS.md", "SOUL.md", "USER.md"]);
     expect(snapshot.matchedDirectories).toEqual(expect.arrayContaining(["memory", "canvas"]));
     expect(snapshot.artifactDirectoryPaths).toEqual(["/tmp/openclaw/canvas"]);
+    expect(snapshot.planDirectoryPaths).toEqual([]);
   });
 
   it("marks workspace as not detected when required markers are missing", async () => {
@@ -119,6 +120,32 @@ describe("openclaw workspace helpers", () => {
             is_dir: false,
             children: null,
           },
+          {
+            name: "plans",
+            path: "/tmp/openclaw/output/plans",
+            is_dir: true,
+            children: [
+              {
+                name: "launch-plan.md",
+                path: "/tmp/openclaw/output/plans/launch-plan.md",
+                is_dir: false,
+                children: null,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: ".lumina",
+        path: "/tmp/openclaw/.lumina",
+        is_dir: true,
+        children: [
+          {
+            name: "openclaw-bridge-note-2026-03-11.md",
+            path: "/tmp/openclaw/.lumina/openclaw-bridge-note-2026-03-11.md",
+            is_dir: false,
+            children: null,
+          },
         ],
       },
     ]);
@@ -130,5 +157,10 @@ describe("openclaw workspace helpers", () => {
     ]);
     expect(snapshot.artifactFilePaths).toEqual(["/tmp/openclaw/output/report.md"]);
     expect(snapshot.artifactFileCount).toBe(1);
+    expect(snapshot.planDirectoryPaths).toEqual(["/tmp/openclaw/output/plans"]);
+    expect(snapshot.planFilePaths).toEqual(["/tmp/openclaw/output/plans/launch-plan.md"]);
+    expect(snapshot.bridgeNotePaths).toEqual([
+      "/tmp/openclaw/.lumina/openclaw-bridge-note-2026-03-11.md",
+    ]);
   });
 });
