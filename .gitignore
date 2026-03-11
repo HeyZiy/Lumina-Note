@@ -61,6 +61,7 @@ mobile/android/local.properties
 third_party/
 
 # AI assistants
+CLAUDE.md
 .claude/
 .kiro/
 .codex/
