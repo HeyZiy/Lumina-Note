@@ -1176,7 +1176,7 @@ function ImageDetailPanel({
         <h2 className="mt-2 text-lg font-semibold">{image.name}</h2>
         <p className="mt-1 break-all text-xs text-muted-foreground">{image.relativePath}</p>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-auto px-4 pt-4">
         <ImageThumbnail
           path={image.path}
           alt={image.name}
@@ -1184,7 +1184,7 @@ function ImageDetailPanel({
           onDimensions={({ width, height }) => onDimension(width, height)}
         />
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-4 pb-4">
           <section className="rounded-2xl border border-border/60 bg-background/70 p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">{t.imageManager.signals}</h3>
