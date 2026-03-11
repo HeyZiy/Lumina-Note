@@ -19,6 +19,14 @@ export interface OpenClawGatewaySettings {
   endpoint: string | null;
 }
 
+export interface OpenClawConflictState {
+  workspacePath: string;
+  status: "idle" | "warning";
+  files: string[];
+  lastDetectedAt: string | null;
+  message: string | null;
+}
+
 export interface OpenClawWorkspaceAttachment {
   kind: "openclaw";
   workspacePath: string;
@@ -28,4 +36,5 @@ export interface OpenClawWorkspaceAttachment {
   detectedFiles: string[];
   detectedFolders: string[];
   gateway: OpenClawGatewaySettings;
+  unavailableReason?: string | null;
 }

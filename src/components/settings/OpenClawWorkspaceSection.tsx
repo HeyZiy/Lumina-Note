@@ -1,4 +1,5 @@
-import { RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import { useFileStore } from "@/stores/useFileStore";
 import { useOpenClawWorkspaceStore } from "@/stores/useOpenClawWorkspaceStore";
@@ -27,25 +28,41 @@ export function OpenClawWorkspaceSection() {
   const vaultPath = useFileStore((state) => state.vaultPath);
   const openFile = useFileStore((state) => state.openFile);
   const {
+    integrationEnabled,
     getSnapshot,
     getAttachment,
+    getConflictState,
+    setIntegrationEnabled,
     refreshWorkspace,
     attachWorkspace,
     detachWorkspace,
+    updateGateway,
     refreshAttachmentScan,
+    clearConflictState,
     isRefreshing,
   } = useOpenClawWorkspaceStore((state) => ({
+    integrationEnabled: state.integrationEnabled,
     getSnapshot: state.getSnapshot,
     getAttachment: state.getAttachment,
+    getConflictState: state.getConflictState,
+    setIntegrationEnabled: state.setIntegrationEnabled,
     refreshWorkspace: state.refreshWorkspace,
     attachWorkspace: state.attachWorkspace,
     detachWorkspace: state.detachWorkspace,
+    updateGateway: state.updateGateway,
     refreshAttachmentScan: state.refreshAttachmentScan,
+    clearConflictState: state.clearConflictState,
     isRefreshing: state.isRefreshing,
   }));
 
   const snapshot = getSnapshot(vaultPath);
   const attachment = getAttachment(vaultPath);
+  const conflictState = getConflictState(vaultPath);
+  const [gatewayEndpointDraft, setGatewayEndpointDraft] = useState("");
+
+  useEffect(() => {
+    setGatewayEndpointDraft(attachment?.gateway.endpoint ?? "");
+  }, [attachment?.gateway.endpoint]);
 
   const handleOpenAgents = async () => {
     if (!snapshot) return;
@@ -70,6 +87,14 @@ export function OpenClawWorkspaceSection() {
     detachWorkspace(vaultPath);
   };
 
+  const handleSaveGateway = () => {
+    if (!vaultPath || !attachment) return;
+    updateGateway(vaultPath, {
+      enabled: gatewayEndpointDraft.trim().length > 0,
+      endpoint: gatewayEndpointDraft.trim() || null,
+    });
+  };
+
   return (
     <section className="space-y-4 rounded-xl border border-border bg-background/60 p-4">
       <div className="flex items-start justify-between gap-4">
@@ -79,16 +104,32 @@ export function OpenClawWorkspaceSection() {
           </h3>
           <p className="text-sm text-muted-foreground">{t.settingsModal.openClawDesc}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void refreshWorkspace(vaultPath)}
-          disabled={!vaultPath || isRefreshing}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background/60 px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
-        >
-          <RefreshCw size={12} className={isRefreshing ? "animate-spin" : undefined} />
-          {t.settingsModal.openClawRescan}
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={integrationEnabled}
+              onChange={(event) => setIntegrationEnabled(event.target.checked)}
+            />
+            {t.settingsModal.openClawEnabled}
+          </label>
+          <button
+            type="button"
+            onClick={() => void refreshWorkspace(vaultPath)}
+            disabled={!vaultPath || isRefreshing || !integrationEnabled}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background/60 px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={isRefreshing ? "animate-spin" : undefined} />
+            {t.settingsModal.openClawRescan}
+          </button>
+        </div>
       </div>
+
+      {!integrationEnabled && (
+        <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+          {t.settingsModal.openClawDisabledDesc}
+        </div>
+      )}
 
       {!vaultPath && (
         <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
@@ -96,7 +137,7 @@ export function OpenClawWorkspaceSection() {
         </div>
       )}
 
-      {vaultPath && snapshot && (
+      {integrationEnabled && vaultPath && snapshot && (
         <div className="space-y-3 rounded-lg border border-border bg-background/70 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -159,7 +200,59 @@ export function OpenClawWorkspaceSection() {
               <span className="font-medium">{t.settingsModal.openClawBoundary}</span>
               <p className="text-muted-foreground">{t.settingsModal.openClawBoundaryHint}</p>
             </div>
+
+            {attachment && (
+              <div className="space-y-2">
+                <span className="font-medium">{t.settingsModal.openClawGatewayTitle}</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={gatewayEndpointDraft}
+                    onChange={(event) => setGatewayEndpointDraft(event.target.value)}
+                    placeholder={t.settingsModal.openClawGatewayPlaceholder}
+                    className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveGateway}
+                    className="rounded-lg border border-border bg-background/60 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {t.common.save}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {attachment.gateway.enabled && attachment.gateway.endpoint
+                    ? t.settingsModal.openClawGatewayConfigured.replace(
+                        "{endpoint}",
+                        attachment.gateway.endpoint,
+                      )
+                    : t.settingsModal.openClawGatewayNotConfigured}
+                </p>
+              </div>
+            )}
           </div>
+
+          {conflictState && conflictState.status === "warning" && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
+              <div className="mb-1 flex items-center gap-2 font-medium">
+                <AlertTriangle size={14} />
+                {t.settingsModal.openClawConflictTitle}
+              </div>
+              <p>{conflictState.message}</p>
+              {conflictState.files.length > 0 && (
+                <p className="mt-1 break-all text-xs">{conflictState.files.join(", ")}</p>
+              )}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => clearConflictState(vaultPath)}
+                  className="rounded-lg border border-amber-500/30 bg-background/60 px-3 py-1 text-xs text-foreground hover:bg-muted"
+                >
+                  {t.settingsModal.openClawConflictDismiss}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             {!attachment && snapshot.status === "detected" && (

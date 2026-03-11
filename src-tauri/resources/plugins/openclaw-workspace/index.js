@@ -113,6 +113,62 @@ module.exports = function setup(api) {
     return true;
   };
 
+  const buildBridgePath = (kind) =>
+    `.lumina/openclaw-bridge-${kind}-${new Date().toISOString().replace(/[:.]/g, "-")}.md`;
+
+  const stageBridgeNote = async (kind, content, metadata) => {
+    const workspacePath = api.workspace.getPath();
+    if (!workspacePath) {
+      api.ui.notify("Open a workspace first.");
+      return false;
+    }
+    const attachment = api.workspace.getOpenClawAttachment();
+    if (!attachment) {
+      api.ui.notify("Attach the current workspace as OpenClaw first.");
+      return false;
+    }
+    const body = [
+      "---",
+      "source: lumina-openclaw-bridge",
+      `kind: ${kind}`,
+      `created_at: ${new Date().toISOString()}`,
+      ...Object.entries(metadata || {}).map(([key, value]) => `${key}: ${String(value)}`),
+      "---",
+      "",
+      content,
+      "",
+    ].join("\n");
+    const path = buildBridgePath(kind);
+    await api.vault.writeFile(path, body);
+    await api.workspace.openFile(path);
+    api.ui.notify(`Staged ${kind} into ${path}`);
+    return true;
+  };
+
+  const stageCurrentNote = async () => {
+    const activePath = api.workspace.getActiveFile();
+    if (!activePath) {
+      api.ui.notify("No active note to stage.");
+      return false;
+    }
+    const content = await api.workspace.readFile(activePath);
+    return stageBridgeNote("note", content, { source_file: activePath });
+  };
+
+  const stageSelection = async () => {
+    const selection = api.editor.getSelection();
+    const activePath = api.workspace.getActiveFile();
+    if (!selection || !selection.text) {
+      api.ui.notify("No editor selection to stage.");
+      return false;
+    }
+    return stageBridgeNote("selection", selection.text, {
+      source_file: activePath || "",
+      selection_from: selection.from,
+      selection_to: selection.to,
+    });
+  };
+
   const renderOverview = (snapshot) => {
     const keyFileItems = snapshot.keyFiles
       .map(
@@ -149,6 +205,9 @@ module.exports = function setup(api) {
             snapshot.attachment.lastValidatedAt || "",
           )}</code></p>`
         : "",
+      snapshot.attachment && snapshot.attachment.gateway && snapshot.attachment.gateway.enabled
+        ? `<p><strong>Gateway:</strong> <code>${escapeHtml(snapshot.attachment.gateway.endpoint || "")}</code></p>`
+        : "<p><strong>Gateway:</strong> not configured</p>",
       guidance,
       "<h3>Key memory files</h3>",
       `<ul>${keyFileItems || "<li>No key files found.</li>"}</ul>`,
@@ -179,7 +238,13 @@ module.exports = function setup(api) {
       api.ui.notify("Open a workspace first.");
       return;
     }
-    const snapshot = await api.workspace.attachOpenClawWorkspace();
+    let snapshot;
+    try {
+      snapshot = await api.workspace.attachOpenClawWorkspace();
+    } catch (error) {
+      api.ui.notify(String(error));
+      return;
+    }
     cachedSnapshot = null;
     api.ui.notify(
       snapshot.detectedFiles.length > 0
@@ -297,6 +362,22 @@ module.exports = function setup(api) {
             description: "Open the newest memory/YYYY-MM-DD.md file.",
             run: () => {
               void openLatestMemory();
+            },
+          },
+          {
+            id: "stage-current-note",
+            title: "Stage current note for OpenClaw",
+            description: "Write the current note into a Lumina bridge note inside the workspace.",
+            run: () => {
+              void stageCurrentNote();
+            },
+          },
+          {
+            id: "stage-selection",
+            title: "Stage selection for OpenClaw",
+            description: "Write the current editor selection into a Lumina bridge note inside the workspace.",
+            run: () => {
+              void stageSelection();
             },
           },
         ],
