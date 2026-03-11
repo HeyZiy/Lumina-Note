@@ -109,6 +109,7 @@ export default {
     videoNoteDetected: 'This appears to be a video note Markdown. You can view and edit it in the dedicated video note view.',
     openAsVideoNote: 'Open as Video Note',
     imageLoadFailed: 'Image load failed',
+    imagePasteFailed: 'Failed to paste image',
     noteNotFound: 'Note not found',
     mermaidRenderFailed: 'Render failed',
     slashMenu: {

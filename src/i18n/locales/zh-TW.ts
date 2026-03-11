@@ -109,6 +109,7 @@ export default {
     videoNoteDetected: '偵測到這是一個視訊筆記 Markdown，可以在專用的視訊筆記視圖中查看和編輯。',
     openAsVideoNote: '以視訊筆記方式開啟',
     imageLoadFailed: '圖片載入失敗',
+    imagePasteFailed: '貼上圖片失敗',
     noteNotFound: '筆記不存在',
     mermaidRenderFailed: '渲染失敗',
     slashMenu: {

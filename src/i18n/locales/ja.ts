@@ -109,6 +109,7 @@ export default {
     videoNoteDetected: 'これは動画ノート Markdown です。専用の動画ノートビューで閲覧・編集できます。',
     openAsVideoNote: '動画ノートとして開く',
     imageLoadFailed: '画像の読み込みに失敗',
+    imagePasteFailed: '画像の貼り付けに失敗しました',
     noteNotFound: 'ノートが見つかりません',
     mermaidRenderFailed: 'レンダリングに失敗',
     slashMenu: {

@@ -7,6 +7,7 @@ import { useLocaleStore } from '@/stores/useLocaleStore';
 import { useShallow } from 'zustand/react/shallow';
 import { parseLuminaLink } from '@/services/pdf/annotations';
 import { createDir, writeBinaryFile, readBinaryFileBase64 } from '@/lib/tauri';
+import { reportOperationError } from '@/lib/reportError';
 import { buildPastedImageTarget, getImageMimeType, resolveEditorImagePath } from '@/services/assets/editorImages';
 import {
   EditorState,
@@ -4081,7 +4082,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorRef, CodeMirrorEditor
                 changes: { from: pos, insert: imageMarkdown },
                 selection: { anchor: pos + imageMarkdown.length },
               });
-            } catch (err) {}
+            } catch (err) {
+              reportOperationError({
+                source: "CodeMirrorEditor.handlePaste",
+                action: useLocaleStore.getState().t.editor.imagePasteFailed,
+                error: err,
+                context: { targetPath: target.filePath, mimeType: file.type },
+              });
+            }
             return;
           }
         }

@@ -109,6 +109,7 @@ export default {
     videoNoteDetected: '检测到这是一个视频笔记 Markdown，可以在专用的视频笔记视图中查看和编辑。',
     openAsVideoNote: '以视频笔记方式打开',
     imageLoadFailed: '图片加载失败',
+    imagePasteFailed: '粘贴图片失败',
     noteNotFound: '笔记不存在',
     mermaidRenderFailed: '渲染失败',
     slashMenu: {
