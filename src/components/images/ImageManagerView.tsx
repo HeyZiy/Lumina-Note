@@ -11,16 +11,15 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  Sparkles,
   ArrowUpDown,
   FolderTree,
-  Images,
-  ScanSearch,
   FileText,
   PencilLine,
   MoveRight,
   X,
   CheckSquare,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -201,6 +200,7 @@ export function ImageManagerView() {
     sortOrder,
     selectedPaths,
     focusedPath,
+    detailPanelOpen,
     setViewMode,
     setGroupMode,
     setStatusFilter,
@@ -209,6 +209,7 @@ export function ImageManagerView() {
     setSortBy,
     setSortOrder,
     setFocusedPath,
+    setDetailPanelOpen,
     toggleSelection,
     replaceSelection,
     clearSelection,
@@ -223,6 +224,7 @@ export function ImageManagerView() {
       sortOrder: state.sortOrder,
       selectedPaths: state.selectedPaths,
       focusedPath: state.focusedPath,
+      detailPanelOpen: state.detailPanelOpen,
       setViewMode: state.setViewMode,
       setGroupMode: state.setGroupMode,
       setStatusFilter: state.setStatusFilter,
@@ -231,6 +233,7 @@ export function ImageManagerView() {
       setSortBy: state.setSortBy,
       setSortOrder: state.setSortOrder,
       setFocusedPath: state.setFocusedPath,
+      setDetailPanelOpen: state.setDetailPanelOpen,
       toggleSelection: state.toggleSelection,
       replaceSelection: state.replaceSelection,
       clearSelection: state.clearSelection,
@@ -350,8 +353,7 @@ export function ImageManagerView() {
   );
   const primaryAsset =
     (focusedPath && filteredImages.find((image) => image.path === focusedPath)) ??
-    (selectedImages.length === 1 ? selectedImages[0] : null) ??
-    (selectedImages.length === 0 ? filteredImages[0] ?? null : null);
+    (selectedImages.length === 1 ? selectedImages[0] : null);
 
   const groupedImages = useMemo(() => {
     if (viewMode !== "group") return [];
@@ -549,167 +551,146 @@ export function ImageManagerView() {
   const currentSelection = selectedImages.length > 0 ? selectedImages : primaryAsset ? [primaryAsset] : [];
   const orphanOnlyView = filteredImages.length > 0 && filteredImages.every((image) => image.orphan);
 
+  const statsSummary = t.imageManager.statsSummary
+    .replace("{total}", String(summary.totalImages))
+    .replace("{orphans}", String(summary.orphanImages))
+    .replace("{totalSize}", formatBytes(summary.totalBytes));
+
   return (
     <div className="flex h-full flex-col bg-background">
-      <div className="border-b border-border/60 bg-[linear-gradient(135deg,hsl(var(--background))_0%,hsl(var(--muted)/0.55)_100%)]">
-        <div className="flex flex-col gap-5 px-5 py-5">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                <Sparkles className="h-3.5 w-3.5" />
-                {t.imageManager.badge}
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">{t.imageManager.title}</h1>
-                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                  {t.imageManager.description}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={handleRefresh} className="ui-icon-btn h-9 w-9" title={t.imageManager.refreshLibrary}>
-                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-              </button>
-              <button
-                onClick={() => setViewMode("grid")}
-                className={cn("ui-icon-btn h-9 w-9", viewMode === "grid" && "border-primary/30 bg-primary/10 text-primary")}
-                title={t.imageManager.gridView}
-              >
-                <Grid2X2 className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={cn("ui-icon-btn h-9 w-9", viewMode === "list" && "border-primary/30 bg-primary/10 text-primary")}
-                title={t.imageManager.listView}
-              >
-                <List className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("group")}
-                className={cn("ui-icon-btn h-9 w-9", viewMode === "group" && "border-primary/30 bg-primary/10 text-primary")}
-                title={t.imageManager.groupedView}
-              >
-                <Layers3 className="h-4 w-4" />
-              </button>
-            </div>
+      {/* Compact header */}
+      <div className="flex flex-col gap-2 border-b border-border/60 px-4 py-2.5">
+        {/* Row 1: title + stats + view buttons */}
+        <div className="flex items-center gap-3">
+          <h1 className="shrink-0 text-sm font-semibold tracking-tight">{t.imageManager.title}</h1>
+          <span className="min-w-0 truncate text-xs text-muted-foreground">{statsSummary}</span>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <button onClick={handleRefresh} className="ui-icon-btn h-8 w-8" title={t.imageManager.refreshLibrary}>
+              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={cn("ui-icon-btn h-8 w-8", viewMode === "grid" && "border-primary/30 bg-primary/10 text-primary")}
+              title={t.imageManager.gridView}
+            >
+              <Grid2X2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn("ui-icon-btn h-8 w-8", viewMode === "list" && "border-primary/30 bg-primary/10 text-primary")}
+              title={t.imageManager.listView}
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode("group")}
+              className={cn("ui-icon-btn h-8 w-8", viewMode === "group" && "border-primary/30 bg-primary/10 text-primary")}
+              title={t.imageManager.groupedView}
+            >
+              <Layers3 className="h-3.5 w-3.5" />
+            </button>
+            <div className="mx-1 h-4 w-px bg-border/60" />
+            <button
+              onClick={() => setDetailPanelOpen(!detailPanelOpen)}
+              className={cn("ui-icon-btn h-8 w-8", detailPanelOpen && "border-primary/30 bg-primary/10 text-primary")}
+              title={detailPanelOpen ? t.imageManager.collapsePanel : t.imageManager.expandPanel}
+            >
+              {detailPanelOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+            </button>
           </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <SummaryCard icon={Images} label={t.imageManager.statusAll} value={summary.totalImages} detail={formatBytes(summary.totalBytes)} />
-            <SummaryCard icon={ScanSearch} label={t.imageManager.statusReferenced} value={summary.referencedImages} detail={t.imageManager.connectedToNotes} />
-            <SummaryCard icon={FolderTree} label={t.imageManager.statusOrphans} value={summary.orphanImages} detail={t.imageManager.safeCleanupCandidates} accent="amber" />
-            <SummaryCard icon={Layers3} label={t.imageManager.statusMultiUsed} value={summary.multiReferencedImages} detail={t.imageManager.sharedAcrossNotes} accent="sky" />
-            <SummaryCard icon={Sparkles} label={t.imageManager.statusRecent} value={summary.recentImages} detail={t.imageManager.changedInLast7Days} accent="violet" />
-            <SummaryCard icon={ImageIcon} label={t.imageManager.statusLarge} value={summary.largeImages} detail={`>${formatBytes(LARGE_IMAGE_THRESHOLD_BYTES)}`} accent="rose" />
-          </div>
-
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-3 py-2 shadow-sm">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder={t.imageManager.searchPlaceholder}
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as ImageManagerStatusFilter)}
-                className="ui-input h-10 min-w-[148px] bg-background text-sm"
-              >
-                {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={folderFilter}
-                onChange={(event) => setFolderFilter(event.target.value)}
-                className="ui-input h-10 min-w-[170px] bg-background text-sm"
-              >
-                <option value="all">{t.imageManager.allFolders}</option>
-                {folderOptions.map((folder) => (
-                  <option key={folder} value={folder}>
-                    {folder === "." ? t.imageManager.vaultRoot : folder}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as ImageManagerSortBy)}
-                className="ui-input h-10 min-w-[170px] bg-background text-sm"
-              >
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-                className="ui-icon-btn h-10 w-10"
-                title={sortOrder === "asc" ? t.imageManager.sortDescending : t.imageManager.sortAscending}
-              >
-                <ArrowUpDown className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          {viewMode === "group" ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setGroupMode("status")}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  groupMode === "status"
-                    ? "border-primary/35 bg-primary/10 text-primary"
-                    : "border-border/60 bg-background/80 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t.imageManager.groupByStatus}
-              </button>
-              <button
-                onClick={() => setGroupMode("folder")}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  groupMode === "folder"
-                    ? "border-primary/35 bg-primary/10 text-primary"
-                    : "border-border/60 bg-background/80 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t.imageManager.groupByFolder}
-              </button>
-            </div>
-          ) : null}
-
-          {successMessage ? (
-            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-              {successMessage}
-            </div>
-          ) : null}
-
-          {orphanOnlyView ? (
-            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-              {t.imageManager.orphanOnlyWarning}
-            </div>
-          ) : null}
         </div>
+
+        {/* Row 2: search + filters */}
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-2.5 py-1.5">
+            <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t.imageManager.searchPlaceholder}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as ImageManagerStatusFilter)}
+            className="ui-input h-8 min-w-[120px] bg-background text-xs"
+          >
+            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={folderFilter}
+            onChange={(event) => setFolderFilter(event.target.value)}
+            className="ui-input h-8 min-w-[120px] bg-background text-xs"
+          >
+            <option value="all">{t.imageManager.allFolders}</option>
+            {folderOptions.map((folder) => (
+              <option key={folder} value={folder}>
+                {folder === "." ? t.imageManager.vaultRoot : folder}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value as ImageManagerSortBy)}
+            className="ui-input h-8 min-w-[120px] bg-background text-xs"
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            className="ui-icon-btn h-8 w-8"
+            title={sortOrder === "asc" ? t.imageManager.sortDescending : t.imageManager.sortAscending}
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Row 3 (conditional): group mode toggle */}
+        {viewMode === "group" ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setGroupMode("status")}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                groupMode === "status"
+                  ? "border-primary/35 bg-primary/10 text-primary"
+                  : "border-border/60 bg-background/80 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t.imageManager.groupByStatus}
+            </button>
+            <button
+              onClick={() => setGroupMode("folder")}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                groupMode === "folder"
+                  ? "border-primary/35 bg-primary/10 text-primary"
+                  : "border-border/60 bg-background/80 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t.imageManager.groupByFolder}
+            </button>
+          </div>
+        ) : null}
       </div>
 
+      {/* Main content area */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="flex h-full flex-col xl:flex-row">
+        <div className="flex h-full">
           <div className="min-h-0 flex-1 overflow-hidden">
             {currentSelection.length > 1 ? (
-              <div className="border-b border-border/60 bg-muted/25 px-4 py-3">
+              <div className="border-b border-border/60 bg-muted/25 px-4 py-2.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5 text-sm font-medium">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-sm font-medium">
                     <CheckSquare className="h-4 w-4 text-primary" />
                     {t.imageManager.imagesSelected.replace("{count}", String(currentSelection.length))}
                   </span>
@@ -736,6 +717,13 @@ export function ImageManagerView() {
             ) : null}
 
             <div className="h-full overflow-auto px-4 py-4">
+              {/* Orphan warning banner (inside content area) */}
+              {orphanOnlyView ? (
+                <div className="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                  {t.imageManager.orphanOnlyWarning}
+                </div>
+              ) : null}
+
               {!vaultPath ? (
                 <EmptyState
                   icon={FolderOpen}
@@ -763,13 +751,13 @@ export function ImageManagerView() {
                 />
               ) : viewMode === "list" ? (
                 <div className="overflow-hidden rounded-2xl border border-border/60 bg-background shadow-sm">
-                  <div className="grid grid-cols-[56px_minmax(0,1.4fr)_minmax(0,1.1fr)_110px_110px_190px_180px] gap-3 border-b border-border/60 px-4 py-3 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  <div className="grid grid-cols-[56px_minmax(0,1.4fr)_minmax(0,1fr)_80px_80px_180px] gap-3 border-b border-border/60 px-4 py-2.5 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground lg:grid-cols-[56px_minmax(0,1.4fr)_minmax(0,1.1fr)_80px_80px_160px_140px]">
                     <span>{t.imageManager.columnPreview}</span>
                     <span>{t.imageManager.columnFile}</span>
                     <span>{t.imageManager.columnLocation}</span>
                     <span>{t.imageManager.columnRefs}</span>
                     <span>{t.imageManager.columnSize}</span>
-                    <span>{t.imageManager.columnChanged}</span>
+                    <span className="hidden lg:block">{t.imageManager.columnChanged}</span>
                     <span>{t.imageManager.columnActions}</span>
                   </div>
                   {filteredImages.map((image) => (
@@ -804,7 +792,6 @@ export function ImageManagerView() {
                           <ImageGridCard
                             key={image.path}
                             image={image}
-                            dimensions={dimensions[image.path]}
                             selected={selectedImageSet.has(image.path)}
                             onDimension={(width, height) => handleDimension(image.path, width, height)}
                             onSelect={handleCardClick}
@@ -825,7 +812,6 @@ export function ImageManagerView() {
                     <ImageGridCard
                       key={image.path}
                       image={image}
-                      dimensions={dimensions[image.path]}
                       selected={selectedImageSet.has(image.path)}
                       onDimension={(width, height) => handleDimension(image.path, width, height)}
                       onSelect={handleCardClick}
@@ -841,32 +827,47 @@ export function ImageManagerView() {
             </div>
           </div>
 
-          <aside className="w-full border-t border-border/60 bg-muted/15 xl:w-[360px] xl:border-l xl:border-t-0">
-            {currentSelection.length > 1 ? (
-              <MultiSelectionPanel images={currentSelection} onMove={() => openMoveDialog(currentSelection.map((image) => image.path))} />
-            ) : primaryAsset ? (
-              <ImageDetailPanel
-                image={primaryAsset}
-                dimensions={dimensions[primaryAsset.path]}
-                onDimension={(width, height) => handleDimension(primaryAsset.path, width, height)}
-                onOpenNote={handleOpenNote}
-                onCopyPath={handleCopyPath}
-                onLocate={handleLocateInTree}
-                onReveal={handleReveal}
-                onRename={openRenameDialog}
-                onMove={(path) => openMoveDialog([path])}
-              />
-            ) : (
-              <EmptyState
-                icon={ImageIcon}
-                title={t.imageManager.selectImageTitle}
-                description={t.imageManager.selectImageDescription}
-                compact
-              />
+          {/* Collapsible detail panel */}
+          <aside
+            className={cn(
+              "shrink-0 overflow-hidden border-l border-border/60 bg-muted/15 transition-[width,opacity] duration-200 ease-out",
+              detailPanelOpen ? "w-[320px] opacity-100" : "w-0 opacity-0",
             )}
+          >
+            <div className="h-full w-[320px]">
+              {currentSelection.length > 1 ? (
+                <MultiSelectionPanel images={currentSelection} onMove={() => openMoveDialog(currentSelection.map((image) => image.path))} />
+              ) : primaryAsset ? (
+                <ImageDetailPanel
+                  image={primaryAsset}
+                  dimensions={dimensions[primaryAsset.path]}
+                  onDimension={(width, height) => handleDimension(primaryAsset.path, width, height)}
+                  onOpenNote={handleOpenNote}
+                  onCopyPath={handleCopyPath}
+                  onLocate={handleLocateInTree}
+                  onReveal={handleReveal}
+                  onRename={openRenameDialog}
+                  onMove={(path) => openMoveDialog([path])}
+                />
+              ) : (
+                <EmptyState
+                  icon={ImageIcon}
+                  title={t.imageManager.selectImageTitle}
+                  description={t.imageManager.selectImageDescription}
+                  compact
+                />
+              )}
+            </div>
           </aside>
         </div>
       </div>
+
+      {/* Toast success message */}
+      {successMessage ? (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-700 shadow-lg backdrop-blur-sm dark:text-emerald-300">
+          {successMessage}
+        </div>
+      ) : null}
 
       {dialog ? (
         <ActionDialog
@@ -884,40 +885,7 @@ export function ImageManagerView() {
   );
 }
 
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  accent,
-}: {
-  icon: typeof Images;
-  label: string;
-  value: number;
-  detail: string;
-  accent?: "amber" | "sky" | "violet" | "rose";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm",
-        accent === "amber" && "border-amber-500/20 bg-amber-500/5",
-        accent === "sky" && "border-sky-500/20 bg-sky-500/5",
-        accent === "violet" && "border-violet-500/20 bg-violet-500/5",
-        accent === "rose" && "border-rose-500/20 bg-rose-500/5",
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <span className="text-2xl font-semibold tracking-tight">{value}</span>
-        <span className="text-xs text-muted-foreground">{detail}</span>
-      </div>
-    </div>
-  );
-}
+
 
 function EmptyState({
   icon: Icon,
@@ -1016,7 +984,6 @@ function CardActions({
 
 function ImageGridCard({
   image,
-  dimensions,
   selected,
   onDimension,
   onSelect,
@@ -1027,7 +994,6 @@ function ImageGridCard({
   onMove,
 }: {
   image: ImageAssetRecord;
-  dimensions?: { width: number; height: number };
   selected: boolean;
   onDimension: (width: number, height: number) => void;
   onSelect: (path: string, event?: React.MouseEvent) => void;
@@ -1069,31 +1035,24 @@ function ImageGridCard({
           <StatusBadges image={image} />
         </div>
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <div>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-semibold">{image.name}</h3>
-              <p className="mt-1 truncate text-xs text-muted-foreground">{image.relativePath}</p>
-            </div>
-            <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-              {getCurrentTranslations().imageManager.refs.replace("{count}", String(image.referenceCount))}
-            </span>
-          </div>
+      <div className="flex flex-1 flex-col gap-2 p-3">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="min-w-0 truncate text-sm font-semibold">{image.name}</h3>
+          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {getCurrentTranslations().imageManager.refs.replace("{count}", String(image.referenceCount))}
+          </span>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-          <span>{getCurrentTranslations().imageManager.sizeLabel.replace("{value}", formatBytes(image.sizeBytes))}</span>
-          <span>{dimensions ? `${dimensions.width}×${dimensions.height}` : getCurrentTranslations().imageManager.detectingSize}</span>
-          <span className="col-span-2 truncate">{getCurrentTranslations().imageManager.folderLabel.replace("{value}", image.folderRelativePath === "." ? getCurrentTranslations().imageManager.vaultRoot : image.folderRelativePath)}</span>
+        <span className="text-xs text-muted-foreground">{formatBytes(image.sizeBytes)}</span>
+        <div className="opacity-0 transition-opacity group-hover:opacity-100">
+          <CardActions
+            path={image.path}
+            onCopyPath={onCopyPath}
+            onLocate={onLocate}
+            onReveal={onReveal}
+            onRename={onRename}
+            onMove={onMove}
+          />
         </div>
-        <CardActions
-          path={image.path}
-          onCopyPath={onCopyPath}
-          onLocate={onLocate}
-          onReveal={onReveal}
-          onRename={onRename}
-          onMove={onMove}
-        />
       </div>
     </div>
   );
@@ -1140,7 +1099,7 @@ function ImageListRow({
       onClick={(event) => onSelect(image.path, event)}
       onKeyDown={handleKeyDown}
       className={cn(
-        "grid grid-cols-[56px_minmax(0,1.4fr)_minmax(0,1.1fr)_110px_110px_190px_180px] gap-3 border-b border-border/50 px-4 py-3 text-left transition-colors hover:bg-accent/35",
+        "grid grid-cols-[56px_minmax(0,1.4fr)_minmax(0,1fr)_80px_80px_180px] gap-3 border-b border-border/50 px-4 py-2.5 text-left transition-colors hover:bg-accent/35 lg:grid-cols-[56px_minmax(0,1.4fr)_minmax(0,1.1fr)_80px_80px_160px_140px]",
         selected && "bg-primary/5",
       )}
     >
@@ -1162,7 +1121,7 @@ function ImageListRow({
       </div>
       <div className="text-sm">{image.referenceCount}</div>
       <div className="text-sm">{formatBytes(image.sizeBytes)}</div>
-      <div className="text-xs text-muted-foreground">{formatDate(image.modifiedAt)}</div>
+      <div className="hidden text-xs text-muted-foreground lg:block">{formatDate(image.modifiedAt)}</div>
       <div className="flex flex-wrap items-center gap-1">
         {image.referencedBy[0] ? (
           <button
