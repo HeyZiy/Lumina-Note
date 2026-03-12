@@ -40,7 +40,7 @@ export function InstalledPluginsModal({ isOpen, onClose }: InstalledPluginsModal
 
   const modal = (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
 
       <div className="relative w-[860px] max-h-[85vh] rounded-xl shadow-2xl overflow-hidden border border-border bg-background/95">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/50">

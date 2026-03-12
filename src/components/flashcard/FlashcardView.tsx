@@ -173,7 +173,7 @@ const CreateCardDialog: React.FC<CreateCardDialogProps> = ({ deckId, onClose }) 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* 背景遮罩 - 点击关闭 */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
       
       {/* 对话框 */}
       <div className="relative bg-white dark:bg-neutral-900 border rounded-xl p-6 w-full max-w-md shadow-xl">

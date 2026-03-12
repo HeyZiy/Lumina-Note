@@ -259,7 +259,7 @@ export function TabBar() {
       {/* Context Menu */}
       {contextMenu && (
         <>
-          <div className="fixed inset-0 z-40" onClick={handleClickOutside} />
+          <div className="fixed inset-0 z-40" onClick={handleClickOutside} aria-hidden="true" />
           <div
             className="fixed z-50 bg-background/75 backdrop-blur-md border border-border/60 rounded-ui-md shadow-ui-float py-1 min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}

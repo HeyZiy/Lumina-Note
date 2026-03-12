@@ -342,7 +342,7 @@ export function GlobalSearch({ isOpen, onClose, request }: GlobalSearchProps) {
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/45 backdrop-blur-[2px] z-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/45 backdrop-blur-[2px] z-50" onClick={onClose} aria-hidden="true" />
 
       {/* Search Panel */}
       <div
