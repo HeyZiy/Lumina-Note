@@ -685,7 +685,7 @@ export function Sidebar() {
           return;
         }
       }
-      if (!pluginRuntime.executeCommand("plugin-command:openclaw-workspace:create-cron-job")) {
+      if (!pluginRuntime.executeCommand("plugin-command:openclaw-workspace:openclaw-workspace:create-cron-job")) {
         reportOperationError({
           source: "Sidebar.openCronEditor",
           action: "Open cron job editor",
