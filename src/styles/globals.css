@@ -53,19 +53,6 @@ body.resizing iframe[data-codex-iframe="true"] {
   --ui-motion-panel: 180ms;
   --ui-motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Database UI tokens */
-  --db-surface: var(--background);
-  --db-surface-subtle: var(--muted);
-  --db-surface-strong: var(--accent);
-  --db-border: var(--border);
-  --db-text-muted: var(--muted-foreground);
-  --db-radius-sm: var(--ui-radius-sm);
-  --db-radius-md: var(--ui-radius-md);
-  --db-radius-lg: var(--ui-radius-lg);
-  --db-motion-feedback: var(--ui-motion-feedback);
-  --db-motion-panel: var(--ui-motion-panel);
-  --db-motion-layout: 220ms;
-  --db-motion-ease: var(--ui-motion-ease);
 }
 
 .dark {
@@ -78,11 +65,6 @@ body.resizing iframe[data-codex-iframe="true"] {
   --primary: 200 75% 55%;  /* 柔和灰蓝 */
   --primary-foreground: 222 30% 12%;
   --border: 220 14% 28%;  /* 暖边框 */
-  --db-surface: var(--background);
-  --db-surface-subtle: var(--muted);
-  --db-surface-strong: var(--accent);
-  --db-border: var(--border);
-  --db-text-muted: var(--muted-foreground);
 }
 
 @layer base {
@@ -166,13 +148,13 @@ body.resizing iframe[data-codex-iframe="true"] {
   .db-panel {
     @apply rounded-ui-md border border-border bg-muted;
     transition-property: transform, opacity, border-color, background-color, box-shadow;
-    transition-duration: var(--db-motion-panel);
-    transition-timing-function: var(--db-motion-ease);
+    transition-duration: var(--ui-motion-panel);
+    transition-timing-function: var(--ui-motion-ease);
   }
 
   .db-menu {
     @apply rounded-ui-md border border-border bg-popover;
-    animation: fadeIn var(--db-motion-panel) var(--db-motion-ease);
+    animation: fadeIn var(--ui-motion-panel) var(--ui-motion-ease);
   }
 
   .db-toolbar {
@@ -184,16 +166,16 @@ body.resizing iframe[data-codex-iframe="true"] {
     @apply placeholder:text-muted-foreground/70;
     @apply focus-visible:outline-none focus-visible:border-primary/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/35;
     transition-property: border-color, background-color, box-shadow;
-    transition-duration: var(--db-motion-feedback);
-    transition-timing-function: var(--db-motion-ease);
+    transition-duration: var(--ui-motion-feedback);
+    transition-timing-function: var(--ui-motion-ease);
   }
 
   .db-icon-btn {
     @apply inline-flex h-8 w-8 items-center justify-center rounded-ui-md border border-transparent;
     @apply focus-visible:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/35;
     transition-property: transform, background-color, border-color, color, opacity;
-    transition-duration: var(--db-motion-feedback);
-    transition-timing-function: var(--db-motion-ease);
+    transition-duration: var(--ui-motion-feedback);
+    transition-timing-function: var(--ui-motion-ease);
   }
   .db-icon-btn:active:not(:disabled) {
     transform: scale(0.97);
@@ -204,8 +186,8 @@ body.resizing iframe[data-codex-iframe="true"] {
     @apply hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50;
     @apply focus-visible:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/35;
     transition-property: transform, background-color, border-color, box-shadow, color;
-    transition-duration: var(--db-motion-feedback);
-    transition-timing-function: var(--db-motion-ease);
+    transition-duration: var(--ui-motion-feedback);
+    transition-timing-function: var(--ui-motion-ease);
   }
   .db-action-btn:active:not(:disabled) {
     transform: scale(0.98);
@@ -216,8 +198,8 @@ body.resizing iframe[data-codex-iframe="true"] {
     @apply hover:bg-accent hover:text-foreground hover:border-border;
     @apply focus-visible:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/35;
     transition-property: transform, background-color, border-color, color, box-shadow;
-    transition-duration: var(--db-motion-feedback);
-    transition-timing-function: var(--db-motion-ease);
+    transition-duration: var(--ui-motion-feedback);
+    transition-timing-function: var(--ui-motion-ease);
   }
 
   .db-toggle-btn:active:not(:disabled) {
@@ -238,8 +220,8 @@ body.resizing iframe[data-codex-iframe="true"] {
     @apply hover:bg-accent;
     @apply focus-visible:outline-none focus-visible:bg-accent;
     transition-property: transform, background-color, color;
-    transition-duration: var(--db-motion-feedback);
-    transition-timing-function: var(--db-motion-ease);
+    transition-duration: var(--ui-motion-feedback);
+    transition-timing-function: var(--ui-motion-ease);
   }
 
   .db-menu-item-danger {
