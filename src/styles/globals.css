@@ -124,10 +124,6 @@ body.resizing iframe[data-codex-iframe="true"] {
       linear-gradient(to bottom, hsl(var(--background)), hsl(var(--background)));
   }
 
-  .ui-glass {
-    @apply border border-border/60 bg-background/55 backdrop-blur-md shadow-ui-card;
-  }
-
   .ui-card {
     @apply rounded-ui-lg border border-border/60 bg-background/70 shadow-ui-card;
   }
@@ -136,33 +132,8 @@ body.resizing iframe[data-codex-iframe="true"] {
     @apply bg-muted/30 border-border/50;
   }
 
-  .ui-card-hover {
-    transition: transform var(--ui-motion-feedback) var(--ui-motion-ease),
-      box-shadow var(--ui-motion-feedback) var(--ui-motion-ease),
-      border-color var(--ui-motion-feedback) var(--ui-motion-ease),
-      background-color var(--ui-motion-feedback) var(--ui-motion-ease);
-  }
-  .ui-card-hover:hover {
-    @apply -translate-y-[1px] shadow-ui-float border-border/80;
-  }
-  .ui-card-hover:active {
-    @apply translate-y-0;
-  }
-
   .ui-kbd {
     @apply inline-flex items-center rounded-md border border-border/60 bg-muted/70 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground;
-  }
-
-  .ui-divider {
-    @apply h-px w-full bg-border/70;
-  }
-
-  .ui-panel {
-    @apply rounded-ui-lg border border-border/60 bg-background/55 backdrop-blur-md shadow-ui-card;
-  }
-
-  .dark .ui-panel {
-    @apply bg-muted/30 border-border/50;
   }
 
   .ui-input {
@@ -285,7 +256,6 @@ body.resizing iframe[data-codex-iframe="true"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ui-card-hover,
   .ui-input,
   .ui-icon-btn,
   .db-panel,
@@ -317,7 +287,6 @@ body.resizing iframe[data-codex-iframe="true"] {
     animation-duration: 1ms !important;
   }
   .ui-icon-btn:active:not(:disabled),
-  .ui-card-hover:active,
   .db-icon-btn:active:not(:disabled),
   .db-action-btn:active:not(:disabled),
   .db-toggle-btn:active:not(:disabled),
