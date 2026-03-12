@@ -890,7 +890,7 @@ export function RightPanel() {
                           <button
                             type="button"
                             onClick={cancelIndex}
-                            className="px-2 py-1 rounded border border-red-500/60 text-xs text-red-500 hover:bg-red-500/10"
+                            className="px-2 py-1 rounded border border-destructive/60 text-xs text-destructive hover:bg-destructive/10"
                           >
                             {t.rag.cancelIndex}
                           </button>
@@ -1042,12 +1042,12 @@ export function RightPanel() {
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">{t.aiSettings.indexStatus}</span>
                         {ragIsIndexing ? (
-                          <span className="text-yellow-500 flex items-center gap-1">
+                          <span className="text-warning flex items-center gap-1">
                             <Loader2 size={10} className="animate-spin" />
                             {t.aiSettings.indexing}
                           </span>
                         ) : indexStatus?.initialized ? (
-                          <span className="text-green-500">✓ {t.aiSettings.indexReady}</span>
+                          <span className="text-success">✓ {t.aiSettings.indexReady}</span>
                         ) : (
                           <span className="text-muted-foreground">{t.aiSettings.notInitialized}</span>
                         )}
@@ -1091,7 +1091,7 @@ export function RightPanel() {
                       )}
 
                       {ragError && (
-                        <div className="text-xs text-red-500">
+                        <div className="text-xs text-destructive">
                           {ragError}
                         </div>
                       )}

@@ -1057,12 +1057,12 @@ export function Sidebar() {
         
         {/* 语音笔记按钮 */}
         {isRecording ? (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-ui-md p-2 space-y-2">
+          <div className="bg-destructive/10 border border-destructive/30 rounded-ui-md p-2 space-y-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-red-500">
+              <div className="flex items-center gap-2 text-destructive">
                 <div className="relative">
                   <Mic size={14} />
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-destructive rounded-full animate-pulse" />
                 </div>
                 <span className="text-xs font-medium">
                   {voiceStatus === "saving" ? t.common.loading : 
@@ -1073,7 +1073,7 @@ export function Sidebar() {
                 <div className="flex gap-1">
                   <button
                     onClick={stopRecording}
-                    className="px-2 py-1 text-xs bg-red-500/90 text-white rounded-ui-sm hover:bg-red-500 transition-colors"
+                    className="px-2 py-1 text-xs bg-destructive/90 text-destructive-foreground rounded-ui-sm hover:bg-destructive transition-colors"
                     title={t.common.save}
                   >
                     {t.common.confirm}
@@ -1591,8 +1591,8 @@ export function Sidebar() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${
-                  ragIsIndexing ? 'bg-yellow-500 animate-pulse' : 
-                  indexStatus?.initialized ? 'bg-green-500' : 'bg-gray-400'
+                  ragIsIndexing ? 'bg-warning animate-pulse' :
+                  indexStatus?.initialized ? 'bg-success' : 'bg-gray-400'
                 }`}></div>
                 <span>
                   {ragIsIndexing ? t.rag.indexing : 
@@ -1605,7 +1605,7 @@ export function Sidebar() {
                 {ragIsIndexing ? (
                   <button
                     onClick={cancelIndex}
-                    className="px-1.5 py-0.5 rounded text-[10px] text-red-500 hover:bg-red-500/10 transition-colors"
+                    className="px-1.5 py-0.5 rounded text-[10px] text-destructive hover:bg-destructive/10 transition-colors"
                     title={t.rag.cancelIndex}
                   >
                     {t.rag.cancel}

@@ -719,7 +719,7 @@ export function ImageManagerView() {
             <div className="h-full overflow-auto px-4 py-4">
               {/* Orphan warning banner (inside content area) */}
               {orphanOnlyView ? (
-                <div className="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                <div className="mb-4 rounded-xl border border-warning/25 bg-warning/10 px-3 py-2 text-sm text-warning">
                   {t.imageManager.orphanOnlyWarning}
                 </div>
               ) : null}
@@ -1227,7 +1227,7 @@ function ImageDetailPanel({
               <span className="text-xs text-muted-foreground">{t.imageManager.noteCount.replace("{count}", String(image.referencedBy.length))}</span>
             </div>
             {image.referencedBy.length === 0 ? (
-              <div className="mt-3 rounded-xl border border-dashed border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-700 dark:text-amber-300">
+              <div className="mt-3 rounded-xl border border-dashed border-warning/30 bg-warning/10 px-3 py-3 text-sm text-warning">
                 {t.imageManager.noReferencesWarning}
               </div>
             ) : (

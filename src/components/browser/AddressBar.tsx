@@ -204,7 +204,7 @@ export function AddressBar({
         {/* 安全指示器 */}
         {url && (
           urlInfo.isSecure ? (
-            <Lock size={12} className="text-green-500 shrink-0" />
+            <Lock size={12} className="text-success shrink-0" />
           ) : (
             <Globe size={12} className="text-muted-foreground shrink-0" />
           )

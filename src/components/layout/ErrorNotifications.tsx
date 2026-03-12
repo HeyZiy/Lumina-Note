@@ -47,8 +47,8 @@ export function ErrorNotifications() {
           key={notice.id}
           className={`rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur-sm ${
             notice.level === "warning"
-              ? "border-yellow-500/40 text-yellow-500"
-              : "border-red-500/40 text-red-500"
+              ? "border-warning/40 text-warning"
+              : "border-destructive/40 text-destructive"
           }`}
         >
           <div className="flex items-start gap-2">

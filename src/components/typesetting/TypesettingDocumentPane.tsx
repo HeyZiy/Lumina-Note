@@ -1846,7 +1846,7 @@ export function TypesettingDocumentPane({ path, onExportReady, autoOpen = true }
             </button>
           ) : null}
           {openOfficePreview && openOfficeStale ? (
-            <span className="text-xs text-amber-600">OpenOffice preview stale</span>
+            <span className="text-xs text-warning">OpenOffice preview stale</span>
           ) : null}
           <span className="text-xs text-muted-foreground">{layoutSummary}</span>
         </div>

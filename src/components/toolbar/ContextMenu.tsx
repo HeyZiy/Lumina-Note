@@ -84,7 +84,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             className={cn(
               "w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors text-left",
               item.danger
-                ? "text-red-500 hover:bg-red-500/10"
+                ? "text-destructive hover:bg-destructive/10"
                 : "text-foreground hover:bg-accent"
             )}
           >

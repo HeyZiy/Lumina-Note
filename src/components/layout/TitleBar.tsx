@@ -208,10 +208,10 @@ export function TitleBar() {
           {/* 关闭 */}
           <button
             onClick={handleClose}
-            className="h-full px-4 hover:bg-red-500/20 transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_hsl(var(--primary)/0.45),0_0_0_4px_hsl(var(--primary)/0.18)]"
+            className="h-full px-4 hover:bg-destructive/20 transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_hsl(var(--primary)/0.45),0_0_0_4px_hsl(var(--primary)/0.18)]"
             title={t.titleBar.close}
           >
-            <X size={14} className="text-muted-foreground hover:text-red-500" />
+            <X size={14} className="text-muted-foreground hover:text-destructive" />
           </button>
         </div>
       </div>

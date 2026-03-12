@@ -123,7 +123,7 @@ export function ProfilePreview() {
           <div className="mt-10 text-sm text-muted-foreground">{t.profilePreview.loadingPreview}</div>
         )}
         {error && (
-          <div className="mt-10 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+          <div className="mt-10 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}

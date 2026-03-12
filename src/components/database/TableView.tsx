@@ -313,7 +313,7 @@ export function TableView({ dbId }: TableViewProps) {
                         : cellStatus[getCellKey(row.id, column.id)] === "saved"
                           ? 'bg-primary/[0.1]'
                           : cellStatus[getCellKey(row.id, column.id)] === "error"
-                            ? 'ring-1 ring-red-500/55 ring-inset bg-red-500/[0.08]'
+                            ? 'ring-1 ring-destructive/55 ring-inset bg-destructive/[0.08]'
                             : ''
                   }`}
                   style={{ width: column.width || 180, minWidth: 100 }}
@@ -333,7 +333,7 @@ export function TableView({ dbId }: TableViewProps) {
                     </span>
                   )}
                   {cellStatus[getCellKey(row.id, column.id)] === "error" && (
-                    <span className="pointer-events-none absolute right-1 top-1 text-red-500" aria-hidden>
+                    <span className="pointer-events-none absolute right-1 top-1 text-destructive" aria-hidden>
                       <AlertCircle className="w-3 h-3" />
                     </span>
                   )}

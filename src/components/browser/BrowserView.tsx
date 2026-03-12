@@ -554,7 +554,7 @@ export function BrowserView({
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
             <div className="text-center p-8">
-              <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+              <AlertCircle className="w-16 h-16 mx-auto text-destructive mb-4" />
               <h3 className="text-lg font-medium mb-2">{t.browser.loadError}</h3>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
               <button
@@ -621,7 +621,7 @@ export function BrowserView({
         
         {/* 状态指示 */}
         {webviewCreated && !error && currentUrl && (
-          <div className="absolute bottom-2 right-2 px-2 py-1 bg-green-500/20 text-green-600 text-xs rounded opacity-0 hover:opacity-100 transition-opacity z-10">
+          <div className="absolute bottom-2 right-2 px-2 py-1 bg-success/20 text-success text-xs rounded opacity-0 hover:opacity-100 transition-opacity z-10">
             ✓ {t.browser.loaded}
           </div>
         )}

@@ -225,14 +225,14 @@ export function DiffView({
   if (diffLines.length === 0) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden bg-background">
-        <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-yellow-500/10">
+        <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-warning/10">
           <div className="flex items-center gap-3">
-            <FileText size={16} className="text-yellow-600" />
+            <FileText size={16} className="text-warning" />
             <span className="font-medium text-sm">{t.ai.diffView.title}</span>
             <span className="text-xs text-muted-foreground">{fileName}</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onReject} className="px-3 py-1.5 text-sm rounded-md bg-muted hover:bg-red-500/20">
+            <button onClick={onReject} className="px-3 py-1.5 text-sm rounded-md bg-muted hover:bg-destructive/20">
               <X size={14} className="inline mr-1" />
               {t.common.close}
             </button>
@@ -257,9 +257,9 @@ export function DiffView({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
       {/* Header */}
-      <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-yellow-500/10">
+      <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-warning/10">
         <div className="flex items-center gap-3">
-          <FileText size={16} className="text-yellow-600" />
+          <FileText size={16} className="text-warning" />
           <span className="font-medium text-sm">{t.ai.diffView.title}</span>
           <span className="text-xs text-muted-foreground">{fileName}</span>
           <span className="text-xs px-2 py-0.5 rounded bg-[hsl(var(--diff-add-bg)/0.3)] text-[hsl(var(--diff-add-text))]">+{stats.added}</span>
@@ -294,7 +294,7 @@ export function DiffView({
           
           <button
             onClick={onReject}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-muted hover:bg-red-500/20 hover:text-red-600 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-muted hover:bg-destructive/20 hover:text-destructive transition-colors"
           >
             <X size={14} />
             {t.ai.diffView.reject}

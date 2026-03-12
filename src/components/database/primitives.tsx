@@ -13,7 +13,7 @@ const iconButtonVariantClass: Record<DatabaseIconButtonVariant, string> = {
   subtle:
     "ui-icon-btn text-muted-foreground hover:text-foreground hover:bg-background hover:border-border",
   danger:
-    "ui-icon-btn text-red-500 hover:text-red-600 hover:bg-red-500/15 hover:border-red-500/40",
+    "ui-icon-btn text-destructive hover:text-destructive hover:bg-destructive/15 hover:border-destructive/40",
 };
 
 export function DatabaseSurface({

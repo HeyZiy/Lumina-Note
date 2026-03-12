@@ -241,12 +241,12 @@ export function Ribbon({ showMacTrafficLightSafeArea = false, flushTopSpacing = 
     "relative w-8 h-8 ui-icon-btn",
     updateRibbonState === "available" && "text-primary border border-primary/25 bg-primary/10 hover:bg-primary/15",
     updateRibbonState === "in-progress" && "text-primary border border-primary/30 bg-primary/10 hover:bg-primary/15",
-    updateRibbonState === "ready" && "text-green-600 border border-green-500/35 bg-green-500/10 hover:bg-green-500/15 hover:text-green-700",
-    updateRibbonState === "cancelled" && "text-amber-600 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15",
-    updateRibbonState === "error" && "text-amber-600 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15",
+    updateRibbonState === "ready" && "text-success border border-success/35 bg-success/10 hover:bg-success/15 hover:text-success",
+    updateRibbonState === "cancelled" && "text-warning border border-warning/30 bg-warning/10 hover:bg-warning/15",
+    updateRibbonState === "error" && "text-warning border border-warning/30 bg-warning/10 hover:bg-warning/15",
   );
   const showUpdateDot = updateRibbonState === "available" || updateRibbonState === "ready";
-  const updateDotClassName = updateRibbonState === "ready" ? "bg-green-600" : "bg-primary";
+  const updateDotClassName = updateRibbonState === "ready" ? "bg-success" : "bg-primary";
 
   const renderUpdateIcon = () => {
     if (updateRibbonState === "available") return <Download size={18} />;

@@ -655,7 +655,7 @@ export function VideoNoteView({
               </div>
             )}
             {webviewCreated && (
-              <div className="absolute bottom-2 right-2 px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">
+              <div className="absolute bottom-2 right-2 px-2 py-1 bg-success/20 text-success text-xs rounded">
                 ✓ {t.videoNote.webviewLoaded}
               </div>
             )}
@@ -904,7 +904,7 @@ export function VideoNoteView({
                         </button>
                         <button
                           onClick={() => handleDeleteNote(note.id)}
-                          className="p-1 hover:bg-accent rounded text-red-500"
+                          className="p-1 hover:bg-accent rounded text-destructive"
                           title={t.common.delete}
                         >
                           <Trash2 className="w-3.5 h-3.5" />

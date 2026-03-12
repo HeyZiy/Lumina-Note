@@ -236,7 +236,7 @@ export function CalendarView({ dbId }: CalendarViewProps) {
       </DatabasePanel>
       {errorMessage && (
         <DatabasePanel
-          className="mt-3 flex items-start gap-2 border-red-500/30 bg-red-500/[0.08] p-2.5 text-xs text-red-600 dark:text-red-300"
+          className="mt-3 flex items-start gap-2 border-destructive/30 bg-destructive/[0.08] p-2.5 text-xs text-destructive"
           role="status"
           aria-live="polite"
         >
@@ -346,7 +346,7 @@ function CalendarNoteCard({
   onDragEnd,
 }: CalendarNoteCardProps) {
   const statusClass = status === "error"
-    ? "ring-1 ring-red-500/50 bg-red-500/[0.08]"
+    ? "ring-1 ring-destructive/50 bg-destructive/[0.08]"
     : status === "saved"
       ? "bg-primary/[0.1]"
       : status === "opening" || status === "rescheduling"
@@ -372,7 +372,7 @@ function CalendarNoteCard({
           <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden />
         )}
         {status === "saved" && <Check className="h-3.5 w-3.5 text-primary" aria-hidden />}
-        {status === "error" && <AlertCircle className="h-3.5 w-3.5 text-red-500" aria-hidden />}
+        {status === "error" && <AlertCircle className="h-3.5 w-3.5 text-destructive" aria-hidden />}
       </div>
     </button>
   );
