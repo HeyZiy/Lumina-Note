@@ -13,32 +13,29 @@ import { processMessageWithFiles } from "@/hooks/useChatSend";
 import { parseMarkdown } from "@/services/markdown/markdown";
 import { resolve } from "@/lib/path";
 import { isIMEComposing } from "@/lib/imeUtils";
-import { listAgentSkills, readAgentSkill, getDocToolsStatus, installDocTools, createDir, saveFile, exists } from "@/lib/tauri";
-import type { SelectedSkill, SkillInfo } from "@/types/skills";
+import { createDir, saveFile, exists } from "@/lib/tauri";
 import {
   ArrowUp,
   Bot,
-  Code2,
   FileText,
+  History,
   Quote,
   Sparkles,
   X,
-  Zap,
   Square,
-  Plus,
-  History,
-  Trash2,
-  MessageSquare,
   Mic,
   MicOff,
   AlertCircle,
   Check,
   Settings,
-  Microscope,
   Globe,
   Bug,
-  Download,
 } from "lucide-react";
+import { useSessionManagement } from "./hooks/useSessionManagement";
+import { useSkillSearch } from "./hooks/useSkillSearch";
+import { ChatHistorySidebar } from "./ChatHistorySidebar";
+import { ChatToolbar, ModeToggle } from "./ChatToolbar";
+import { WelcomeGreeting, WelcomeSuggestions } from "./WelcomeSection";
 import { AgentMessageRenderer, ThinkingCollapsible } from "../chat/AgentMessageRenderer";
 import { AssistantDiagramPanels } from "../chat/AssistantDiagramPanels";
 import { PlanCard } from "../chat/PlanCard";
@@ -78,25 +75,6 @@ import {
   type ThinkingMode,
 } from "@/services/llm";
 
-// 随机黄豆 emoji 列表
-const WELCOME_EMOJIS = [
-  "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃",
-  "😊", "😍", "🤩", "😘", "😗", "😋", "😜", "🤪", "😝", "🤑",
-  "🤗", "🤭", "🤫", "🤔", "🤐", "🤨", "😐", "😑", "😶", "😏",
-  "😒", "🙄", "😬", "😌", "😔", "😪", "🤤", "😴", "🥳", "🤠",
-  "🧐", "🤓", "😎",
-];
-
-// 快捷操作卡片数据 - 动态获取翻译
-function getQuickActions(t: ReturnType<typeof useLocaleStore.getState>['t']) {
-  return [
-    { icon: Sparkles, label: t.ai.polishText, desc: t.ai.polishTextDesc, mode: "chat" as const, prompt: t.ai.quickPrompts.polishText },
-    { icon: FileText, label: t.ai.summarizeNote, desc: t.ai.summarizeNoteDesc, mode: "chat" as const, prompt: t.ai.quickPrompts.summarizeNote },
-    { icon: Zap, label: t.ai.writeArticle, desc: t.ai.writeArticleDesc, mode: "agent" as const, prompt: t.ai.quickPrompts.writeArticle },
-    { icon: Bot, label: t.ai.studyNotes, desc: t.ai.studyNotesDesc, mode: "agent" as const, prompt: t.ai.quickPrompts.studyNotes },
-  ];
-}
-
 type ChatAssistantPart =
   | { type: "text"; content: string }
   | { type: "thinking"; content: string };
@@ -130,38 +108,9 @@ function parseChatAssistantParts(content: string): ChatAssistantPart[] {
   return parts;
 }
 
-// 建议卡片组件
-function SuggestionCard({
-  icon: Icon,
-  title,
-  desc,
-  onClick
-}: {
-  icon: React.ElementType;
-  title: string;
-  desc: string;
-  onClick: () => void;
-}) {
-  return (
-    <motion.button
-      whileHover={{ scale: 1.02, y: -2 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      className="bg-background/50 hover:bg-accent/60 p-4 rounded-ui-lg cursor-pointer border border-border/50 transition-colors flex flex-col items-start gap-1 text-left"
-    >
-      <div className="p-2 bg-background rounded-lg text-muted-foreground mb-1">
-        <Icon size={18} />
-      </div>
-      <span className="text-sm font-medium text-foreground">{title}</span>
-      <span className="text-xs text-muted-foreground">{desc}</span>
-    </motion.button>
-  );
-}
-
-
 export function MainAIChatShell() {
   const { t } = useLocaleStore();
-  const { chatMode, setChatMode, setSkillManagerOpen } = useUIStore();
+  const { chatMode, setSkillManagerOpen } = useUIStore();
   const isCodexMode = chatMode === "codex";
   const [input, setInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -170,13 +119,8 @@ export function MainAIChatShell() {
   const [showMention, setShowMention] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [selectedSkills, setSelectedSkills] = useState<SelectedSkill[]>([]);
-  const [skillQuery, setSkillQuery] = useState("");
-  const [showSkillMenu, setShowSkillMenu] = useState(false);
-  const [skillsLoading, setSkillsLoading] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-  const [enableWebSearch, setEnableWebSearch] = useState(false); // 网络搜索开关
+  const [enableWebSearch, setEnableWebSearch] = useState(false);
   const [isExportSelectionMode, setIsExportSelectionMode] = useState(false);
   const [selectedExportIds, setSelectedExportIds] = useState<string[]>([]);
   const [isExportingConversation, setIsExportingConversation] = useState(false);
@@ -186,24 +130,33 @@ export function MainAIChatShell() {
   const autoSendMessageRef = useRef<string | null>(null);
   const reduceMotion = useReducedMotion();
 
+  // Extracted hooks
+  const {
+    allSessions,
+    handleSwitchSession: _sessionSwitch,
+    handleDeleteSession,
+    isCurrentSession,
+    handleNewChat: _sessionNewChat,
+    rustSessionId,
+    chatSessionId,
+  } = useSessionManagement();
+
+  const {
+    filteredSkills,
+    selectedSkills,
+    setSelectedSkills,
+    setSkillQuery,
+    showSkillMenu,
+    setShowSkillMenu,
+    skillsLoading,
+    handleSelectSkill: _handleSelectSkill,
+  } = useSkillSearch();
+
   useEffect(() => {
     if (isCodexMode && showHistory) {
       setShowHistory(false);
     }
   }, [isCodexMode, showHistory]);
-
-  useEffect(() => {
-    if (chatMode !== "agent") {
-      setSelectedSkills([]);
-      setShowSkillMenu(false);
-      setSkillQuery("");
-    }
-  }, [chatMode]);
-
-  // 随机选择一个 emoji（组件挂载时确定）
-  const [welcomeEmoji] = useState(() =>
-    WELCOME_EMOJIS[Math.floor(Math.random() * WELCOME_EMOJIS.length)]
-  );
 
   // ========== Rust Agent ==========
   const {
@@ -212,15 +165,9 @@ export function MainAIChatShell() {
     error: _rustError,
     lastIntent: rustLastIntent,
     totalTokensUsed: rustTotalTokens,
-    sessions: rustSessions,
-    currentSessionId: rustSessionId,
     currentPlan: rustCurrentPlan,
-    createSession: rustCreateSession,
-    switchSession: rustSwitchSession,
-    deleteSession: rustDeleteSession,
     startTask: rustStartTask,
     abort: agentAbort,
-    clearChat: rustClearChat,
     debugEnabled,
     debugLogPath,
     enableDebug,
@@ -270,11 +217,6 @@ export function MainAIChatShell() {
   // Chat store - 使用 selector 确保状态变化时正确重新渲染
   const {
     messages: chatMessages,
-    sessions: chatSessions,
-    currentSessionId: chatSessionId,
-    createSession: createChatSession,
-    switchSession: switchChatSession,
-    deleteSession: deleteChatSession,
     isLoading: chatLoading,
     isStreaming: chatStreaming,
     error: chatError,
@@ -291,11 +233,6 @@ export function MainAIChatShell() {
     consumeInputAppends,
   } = useAIStore(useShallow((state) => ({
     messages: state.messages,
-    sessions: state.sessions,
-    currentSessionId: state.currentSessionId,
-    createSession: state.createSession,
-    switchSession: state.switchSession,
-    deleteSession: state.deleteSession,
     isLoading: state.isLoading,
     isStreaming: state.isStreaming,
     error: state.error,
@@ -322,81 +259,30 @@ export function MainAIChatShell() {
   useRAGStore();
 
   // Deep Research
-  const { startResearch, isRunning: isResearchRunning, abortResearch, currentSession: _researchSession, reset: resetResearch } = useDeepResearchStore();
+  const { startResearch, isRunning: isResearchRunning, abortResearch, currentSession: _researchSession } = useDeepResearchStore();
   
   // 设置 Deep Research 事件监听
   useEffect(() => {
     setupDeepResearchListener();
   }, []);
 
-  // Deep Research 会话
-  const {
-    sessions: researchSessions,
-    selectedSessionId: researchSelectedId,
-    selectSession: selectResearchSession,
-    deleteSession: deleteResearchSession,
-  } = useDeepResearchStore();
+  // Wrap session hooks with local state side effects
+  const handleSwitchSession = useCallback(
+    (id: string, type: "agent" | "chat" | "research") => {
+      _sessionSwitch(id, type);
+      setShowHistory(false);
+    },
+    [_sessionSwitch],
+  );
 
-  // 统一会话列表 - 合并所有类型，按更新时间排序
-  const allSessions = useMemo(() => {
-    const agentList = rustSessions.map(s => ({
-      ...s,
-      type: "agent" as const,
-    }));
-    const chatList = chatSessions.map(s => ({
-      ...s,
-      type: "chat" as const,
-    }));
-    const researchList = researchSessions.map(s => ({
-      ...s,
-      type: "research" as const,
-      title: s.topic,  // Research 用 topic 作为 title
-      updatedAt: (s.completedAt || s.startedAt).getTime(),
-    }));
-    return [...agentList, ...chatList, ...researchList].sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [rustSessions, chatSessions, researchSessions]);
-
-  // 根据模式获取创建会话函数
-  const createSession = chatMode === "agent" 
-    ? rustCreateSession 
-    : createChatSession;
-  
-  // 统一切换会话函数
-  const handleSwitchSession = useCallback((id: string, type: "agent" | "chat" | "research") => {
-    if (type === "agent") {
-      rustSwitchSession(id);
-      if (chatMode !== "agent") setChatMode("agent");
-    } else if (type === "research") {
-      selectResearchSession(id);
-      if (chatMode !== "research") setChatMode("research");
-    } else {
-      switchChatSession(id);
-      if (chatMode !== "chat") setChatMode("chat");
-    }
+  const handleNewChat = useCallback(() => {
+    if (chatMode === "codex") return;
+    setIsExportSelectionMode(false);
+    setSelectedExportIds([]);
+    setSelectedSkills([]);
+    _sessionNewChat();
     setShowHistory(false);
-  }, [chatMode, setChatMode, rustSwitchSession, switchChatSession, selectResearchSession]);
-
-  // 统一删除会话函数
-  const handleDeleteSession = useCallback((id: string, type: "agent" | "chat" | "research") => {
-    if (type === "agent") {
-      rustDeleteSession(id);
-    } else if (type === "research") {
-      deleteResearchSession(id);
-    } else {
-      deleteChatSession(id);
-    }
-  }, [rustDeleteSession, deleteChatSession, deleteResearchSession]);
-
-  // 判断是否当前会话
-  const isCurrentSession = useCallback((id: string, type: "agent" | "chat" | "research") => {
-    if (type === "agent") {
-      return chatMode === "agent" && rustSessionId === id;
-    }
-    if (type === "research") {
-      return researchSelectedId === id;
-    }
-    return chatMode === "chat" && chatSessionId === id;
-  }, [chatMode, rustSessionId, chatSessionId, researchSelectedId]);
+  }, [chatMode, _sessionNewChat, setSelectedSkills]);
 
   const { vaultPath, currentFile, currentContent, fileTree, openFile, refreshFileTree } = useFileStore(
     useShallow((state) => ({
@@ -408,33 +294,6 @@ export function MainAIChatShell() {
       refreshFileTree: state.refreshFileTree,
     })),
   );
-
-  // 加载可用 skills（仅 Agent 模式）
-  useEffect(() => {
-    let active = true;
-    if (chatMode !== "agent") {
-      setShowSkillMenu(false);
-      return;
-    }
-    setSkillsLoading(true);
-    listAgentSkills(vaultPath || undefined)
-      .then((items) => {
-        if (!active) return;
-        setSkills(items);
-      })
-      .catch((err) => {
-        if (!active) return;
-        console.warn("[Skills] Failed to load skills:", err);
-        setSkills([]);
-      })
-      .finally(() => {
-        if (!active) return;
-        setSkillsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [chatMode, vaultPath]);
 
   const { isRecording, interimText, toggleRecording } = useSpeechToText((text: string) => {
     setInput((prev) => (prev ? prev + " " + text : text));
@@ -532,17 +391,21 @@ export function MainAIChatShell() {
 
   const currentConversationTitle = useMemo(() => {
     if (chatMode === "agent") {
-      const currentSession = rustSessions.find((session) => session.id === rustSessionId);
+      const currentSession = allSessions.find(
+        (s) => s.type === "agent" && s.id === rustSessionId,
+      );
       return currentSession?.title || t.ai.conversation;
     }
 
     if (chatMode === "chat") {
-      const currentSession = chatSessions.find((session) => session.id === chatSessionId);
+      const currentSession = allSessions.find(
+        (s) => s.type === "chat" && s.id === chatSessionId,
+      );
       return currentSession?.title || t.ai.conversation;
     }
 
     return t.ai.conversation;
-  }, [chatMode, rustSessions, rustSessionId, chatSessions, chatSessionId, t.ai.conversation]);
+  }, [chatMode, allSessions, rustSessionId, chatSessionId, t.ai.conversation]);
 
   useEffect(() => {
     if (!isConversationMode) {
@@ -800,18 +663,6 @@ export function MainAIChatShell() {
     return null;
   }, []);
 
-  const filteredSkills = useMemo(() => {
-    if (!skills.length) return [];
-    const q = skillQuery.trim().toLowerCase();
-    if (!q) return skills.slice(0, 8);
-    return skills
-      .filter((skill) =>
-        skill.name.toLowerCase().includes(q) ||
-        skill.title.toLowerCase().includes(q) ||
-        (skill.description?.toLowerCase().includes(q) ?? false)
-      )
-      .slice(0, 8);
-  }, [skills, skillQuery]);
 
   const allFiles = useMemo(() => flattenFileTreeToReferences(fileTree), [fileTree]);
 
@@ -892,48 +743,12 @@ export function MainAIChatShell() {
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, [input]);
 
-  const handleSelectSkill = useCallback(async (skill: SkillInfo) => {
-    if (selectedSkills.some((s) => s.name === skill.name)) {
-      setShowSkillMenu(false);
-      setSkillQuery("");
-      setInput((prev) =>
-        prev.replace(/(?:^|\s)\/[^\s]*$/, (match) => (match.startsWith(" ") ? " " : ""))
-      );
-      return;
-    }
-    try {
-      if (skill.name === "docx") {
-        try {
-          const status = await getDocToolsStatus();
-          if (!status.installed && status.missing.length > 0) {
-            const shouldInstall = window.confirm(t.settingsModal.docToolsPrompt);
-            if (shouldInstall) {
-              await installDocTools();
-            }
-          }
-        } catch (err) {
-          console.warn("[DocTools] Failed to check/install doc tools:", err);
-        }
-      }
-      const detail = await readAgentSkill(skill.name, vaultPath || undefined);
-      const nextSkill: SelectedSkill = {
-        name: detail.info.name,
-        title: detail.info.title,
-        description: detail.info.description,
-        prompt: detail.prompt,
-        source: detail.info.source,
-      };
-      setSelectedSkills((prev) => [...prev, nextSkill]);
-    } catch (err) {
-      console.warn("[Skills] Failed to load skill detail:", err);
-    } finally {
-      setShowSkillMenu(false);
-      setSkillQuery("");
-      setInput((prev) =>
-        prev.replace(/(?:^|\s)\/[^\s]*$/, (match) => (match.startsWith(" ") ? " " : ""))
-      );
-    }
-  }, [selectedSkills, vaultPath, t]);
+  const handleSelectSkill = useCallback(async (skill: Parameters<typeof _handleSelectSkill>[0]) => {
+    await _handleSelectSkill(skill);
+    setInput((prev) =>
+      prev.replace(/(?:^|\s)\/[^\s]*$/, (match) => (match.startsWith(" ") ? " " : ""))
+    );
+  }, [_handleSelectSkill]);
 
   // 发送消息
   const handleSend = useCallback(async (overrideInput?: string) => {
@@ -1085,19 +900,13 @@ export function MainAIChatShell() {
       return;
     }
     autoSendRef.current = true;
-    if (chatMode === "research") {
-      resetResearch();
-    } else if (chatMode === "agent") {
-      rustClearChat();
-    } else {
-      createSession();
-    }
+    handleNewChat();
     autoSendMessageRef.current = t.ai.performanceDebugMessage;
     setInput(t.ai.performanceDebugMessage);
     setTimeout(() => {
       handleSendRef.current(t.ai.performanceDebugMessage);
     }, 200);
-  }, [chatMode, resetResearch, rustClearChat, createSession, t]);
+  }, [chatMode, handleNewChat, t]);
 
   // 键盘事件
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1168,9 +977,6 @@ export function MainAIChatShell() {
     }
   }, [chatMode, agentAbort, stopStreaming, abortResearch]);
 
-  // 获取快捷操作列表
-  const quickActions = useMemo(() => getQuickActions(t), [t]);
-
   // 获取标签用于动态 placeholder
   const { allTags } = useNoteIndexStore();
   
@@ -1191,13 +997,6 @@ export function MainAIChatShell() {
     return t.deepResearch.placeholderExample.replace('{example}', example);
   }, [allTags, t]);
 
-  // 快捷操作点击
-  const handleQuickAction = (action: typeof quickActions[0]) => {
-    setChatMode(action.mode);
-    if (action.prompt) {
-      setInput(action.prompt);
-    }
-  };
 
   const resolveCreatedFilePath = useCallback((path: string): string => {
     const cleaned = path.trim().replace(/^["'`](.*)["'`]$/, "$1");
@@ -1266,243 +1065,36 @@ export function MainAIChatShell() {
     return [...uniqueFiles.values()];
   }, [messages, chatMode, resolveCreatedFilePath]);
 
-  // 新建对话
-  const handleNewChat = () => {
-    if (chatMode === "codex") {
-      return;
-    }
-    setIsExportSelectionMode(false);
-    setSelectedExportIds([]);
-    setSelectedSkills([]);
-    if (chatMode === "research") {
-      // Research 模式: 重置当前研究会话，准备新研究
-      resetResearch();
-    } else if (chatMode === "agent") {
-      // Rust Agent: 清空消息
-      rustClearChat();
-    } else {
-      // Chat 模式: 创建新会话
-      createSession();
-    }
-    setShowHistory(false);
-  };
-
-  // 格式化时间
-  const formatTime = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    if (isToday) {
-      return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-    }
-    return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
-  };
-
-  const renderModeToggle = (className?: string) => (
-    <div className={`ai-mode-toggle flex items-center gap-0.5 bg-muted rounded-lg p-0.5 shrink-0 ${className ?? ""}`}>
-      <button
-        onClick={() => setChatMode("chat")}
-        title={t.ai.chatModeHint}
-        className={`shrink-0 px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 whitespace-nowrap ${chatMode === "chat"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-          }`}
-      >
-        <span className="flex items-center gap-1 min-w-0">
-          <Sparkles size={12} />
-          <span className="ai-mode-label ui-compact-text">{t.ai.modeChat}</span>
-        </span>
-      </button>
-      <button
-        onClick={() => setChatMode("agent")}
-        title={t.ai.agentModeHint}
-        className={`shrink-0 px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 whitespace-nowrap ${chatMode === "agent"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-          }`}
-      >
-        <span className="flex items-center gap-1 min-w-0">
-          <Bot size={12} />
-          <span className="ai-mode-label ui-compact-text">{t.ai.modeAgent}</span>
-        </span>
-      </button>
-      <button
-        onClick={() => setChatMode("research")}
-        title={t.deepResearch.modeTitle}
-        className={`shrink-0 px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 whitespace-nowrap ${chatMode === "research"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-          }`}
-      >
-        <span className="flex items-center gap-1 min-w-0">
-          <Microscope size={12} />
-          <span className="ai-mode-label ui-compact-text">{t.deepResearch.modeLabel}</span>
-        </span>
-      </button>
-      <button
-        onClick={() => setChatMode("codex")}
-        title="Codex"
-        className={`shrink-0 px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 whitespace-nowrap ${chatMode === "codex"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-          }`}
-      >
-        <span className="flex items-center gap-1 min-w-0">
-          <Code2 size={12} />
-          <span className="ai-mode-label ui-compact-text">{t.ai.modeCodex}</span>
-        </span>
-      </button>
-    </div>
-  );
 
   return (
     <div ref={chatContainerRef} className="h-full bg-background text-foreground flex flex-col overflow-hidden relative">
-      {/* 顶部工具栏 */}
-      {isCodexMode ? (
-        <div className="ui-compact-row h-10 flex items-center justify-between px-4 border-b border-border shrink-0 min-w-0">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Code2 size={14} />
-            <span className="ui-compact-text ui-compact-hide-md">{t.ai.modeCodex}</span>
-          </div>
-          {renderModeToggle()}
-        </div>
-      ) : (
-        <div className="ui-compact-row h-10 flex items-center justify-between px-4 border-b border-border shrink-0 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap ${showHistory
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-            >
-              <History size={14} />
-              <span className="ui-compact-text ui-compact-hide">{t.ai.historyChats}</span>
-            </button>
-            <span className="ml-3 text-[11px] text-muted-foreground select-none whitespace-nowrap ui-compact-text ui-compact-hide-md">
-              {t.ai.sessionTokens}: {chatMode === "agent" ? rustTotalTokens : chatTotalTokens}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {isConversationMode && (
-              <button
-                onClick={isExportSelectionMode ? handleCancelExportSelection : handleStartExportSelection}
-                disabled={isLoading || exportCandidates.length === 0}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Download size={14} />
-                <span className="ui-compact-text ui-compact-hide">
-                  {isExportSelectionMode ? t.ai.exportCancel : t.ai.exportConversation}
-                </span>
-              </button>
-            )}
-            <button
-              onClick={handleNewChat}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors whitespace-nowrap"
-            >
-              <Plus size={14} />
-              <span className="ui-compact-text ui-compact-hide">{t.ai.newChat}</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Toolbar */}
+      <ChatToolbar
+        showHistory={showHistory}
+        onToggleHistory={() => setShowHistory(!showHistory)}
+        isConversationMode={isConversationMode}
+        isExportSelectionMode={isExportSelectionMode}
+        isLoading={isLoading}
+        exportCandidates={exportCandidates}
+        onStartExportSelection={handleStartExportSelection}
+        onCancelExportSelection={handleCancelExportSelection}
+        onNewChat={handleNewChat}
+        agentTokens={rustTotalTokens}
+        chatTokens={chatTotalTokens}
+        renderModeToggle={(className) => <ModeToggle className={className} />}
+      />
 
       <div className="flex-1 relative overflow-hidden">
-        {/* 历史对话侧边栏 - 覆盖式，不影响内容居中 */}
+        {/* Chat history sidebar */}
         <AnimatePresence>
           {showHistory && (
-            <>
-              {/* 遮罩层 */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/20 z-30"
-                onClick={() => setShowHistory(false)}
-              />
-              {/* 侧边栏 */}
-              <motion.div
-                initial={{ x: -240, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -240, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="absolute left-0 top-0 h-full w-60 border-r border-border bg-background shadow-lg z-40 flex flex-col"
-              >
-                <div className="p-3 border-b border-border flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-muted-foreground">
-                    {t.ai.historyChats}
-                  </h3>
-                  <button
-                    onClick={() => setShowHistory(false)}
-                    className="p-1 rounded hover:bg-muted text-muted-foreground"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  {allSessions.length === 0 ? (
-                    <div className="p-4 text-xs text-muted-foreground text-center">
-                      {t.ai.noHistory}
-                    </div>
-                  ) : (
-                    allSessions.map((session) => {
-                      const isActive = isCurrentSession(session.id, session.type);
-                      // 根据类型选择图标和颜色
-                      const IconComponent = session.type === "agent" 
-                        ? Bot 
-                        : session.type === "research" 
-                          ? Microscope 
-                          : MessageSquare;
-                      const iconColor = session.type === "agent" 
-                        ? "text-purple-500" 
-                        : session.type === "research"
-                          ? "text-emerald-500"
-                          : "text-muted-foreground";
-                      
-                      return (
-                        <div
-                          key={session.id}
-                          className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
-                            isActive ? "bg-muted" : "hover:bg-muted/50"
-                          }`}
-                          onClick={() => handleSwitchSession(session.id, session.type)}
-                        >
-                          <IconComponent size={14} className={`shrink-0 ${iconColor}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium truncate">{session.title}</div>
-                            <div className="flex items-center gap-1">
-                              {session.type === "agent" && (
-                                <span className="text-[9px] text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-1 rounded">
-                                  Agent
-                                </span>
-                              )}
-                              {session.type === "research" && (
-                                <span className="text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-1 rounded">
-                                  Research
-                                </span>
-                              )}
-                              <span className="text-[10px] text-muted-foreground">
-                                {formatTime(session.updatedAt)}
-                              </span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteSession(session.id, session.type);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
-                            title={t.common.delete}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </motion.div>
-            </>
+            <ChatHistorySidebar
+              allSessions={allSessions}
+              isCurrentSession={isCurrentSession}
+              onSwitchSession={handleSwitchSession}
+              onDeleteSession={handleDeleteSession}
+              onClose={() => setShowHistory(false)}
+            />
           )}
         </AnimatePresence>
 
@@ -1517,29 +1109,7 @@ export function MainAIChatShell() {
           ) : (
             <>
 
-          {/* 欢迎语与头像 - 仅在未开始时显示 */}
-          <AnimatePresence>
-            {!hasStarted && (
-              <motion.div
-                className="text-center mt-10 md:mt-12 mb-8 space-y-6"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20, scale: 0.9, transition: { duration: 0.3 } }}
-              >
-                {/* 头像/Emoji */}
-                <div className="w-20 h-20 bg-background rounded-full mx-auto shadow-sm border border-border flex items-center justify-center">
-                  <span className="text-4xl">{welcomeEmoji}</span>
-                </div>
-
-                <h1 className="text-3xl font-bold text-foreground tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
-                  {t.ai.welcomeTitle}
-                </h1>
-                <p className="text-muted-foreground text-sm whitespace-nowrap overflow-hidden text-ellipsis">
-                  {t.ai.welcomeSubtitle}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <WelcomeGreeting hasStarted={hasStarted} />
 
           {/* 消息列表区域 (对话模式) */}
           <div
@@ -2011,7 +1581,7 @@ export function MainAIChatShell() {
                 <div className="ai-toolbar-row px-4 pb-3 pt-1 flex items-center justify-between">
                   <div className="ai-toolbar-left flex items-center gap-2 min-w-0 overflow-hidden">
                     {/* Chat/Agent/Research/Codex 切换滑块 */}
-                    {renderModeToggle()}
+                    {<ModeToggle />}
 
                     {/* 网络搜索按钮（独立于模式切换） */}
                     <button
@@ -2160,33 +1730,8 @@ export function MainAIChatShell() {
           </div>
           )}
 
-          {/* 建议卡片区域 - 仅在未开始时显示 */}
           {!isCodexMode && (
-          <AnimatePresence>
-            {!hasStarted && (
-              <motion.div
-                className="w-full max-w-3xl mx-auto px-4 mt-10"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0, transition: { delay: 0.1 } }}
-                exit={{ opacity: 0, y: 50, pointerEvents: "none", transition: { duration: 0.2 } }}
-              >
-                <div className="mb-4 px-1">
-                  <span className="text-xs font-medium text-muted-foreground">{t.ai.startTask}</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {quickActions.map((action, idx) => (
-                    <SuggestionCard
-                      key={idx}
-                      icon={action.icon}
-                      title={action.label}
-                      desc={action.desc}
-                      onClick={() => handleQuickAction(action)}
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            <WelcomeSuggestions hasStarted={hasStarted} onSetInput={setInput} />
           )}
             </>
           )}
