@@ -149,7 +149,7 @@ export function ColumnHeader({ dbId, column, onDragStart, onDragEnd }: ColumnHea
                 setIsEditing(false);
               }
             }}
-            className="db-input h-7 min-w-0 flex-1 border-transparent bg-transparent px-1 focus-visible:border-transparent focus-visible:shadow-none"
+            className="ui-input h-7 min-w-0 flex-1 border-transparent bg-transparent px-1 focus-visible:border-transparent focus-visible:shadow-none"
           />
         ) : (
           <span
@@ -228,7 +228,7 @@ export function ColumnHeader({ dbId, column, onDragStart, onDragEnd }: ColumnHea
                       }}
                       placeholder={t.database.formula.expressionPlaceholder}
                       aria-label={t.database.formula.expression}
-                      className="db-input mt-1 h-8 w-full px-2 text-xs"
+                      className="ui-input mt-1 h-8 w-full px-2 text-xs"
                     />
                   </div>
                 </>

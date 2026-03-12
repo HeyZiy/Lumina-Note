@@ -84,7 +84,7 @@ export function SelectCell({ value, onChange, isEditing, onBlur, column, dbId }:
             </span>
             <button
               onClick={handleClear}
-              className="db-icon-btn h-5 w-5 opacity-0 group-hover:opacity-100"
+              className="ui-icon-btn h-5 w-5 opacity-0 group-hover:opacity-100"
               aria-label={t.common.clear}
               title={t.common.clear}
             >
@@ -132,12 +132,12 @@ export function SelectCell({ value, onChange, isEditing, onBlur, column, dbId }:
                   if (e.key === 'Enter') handleAddOption();
                 }}
                 placeholder={t.database.newOption}
-                className="db-input h-8 flex-1 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
+                className="ui-input h-8 flex-1 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
               />
               <button
                 onClick={handleAddOption}
                 disabled={!newOptionName.trim()}
-                className="db-icon-btn h-7 w-7 disabled:opacity-50"
+                className="ui-icon-btn h-7 w-7 disabled:opacity-50"
                 aria-label={t.common.add}
                 title={t.common.add}
               >

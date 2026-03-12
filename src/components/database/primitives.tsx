@@ -9,11 +9,11 @@ type DatabaseIconButtonVariant = "default" | "subtle" | "danger";
 
 const iconButtonVariantClass: Record<DatabaseIconButtonVariant, string> = {
   default:
-    "db-icon-btn text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border",
+    "ui-icon-btn text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border",
   subtle:
-    "db-icon-btn text-muted-foreground hover:text-foreground hover:bg-background hover:border-border",
+    "ui-icon-btn text-muted-foreground hover:text-foreground hover:bg-background hover:border-border",
   danger:
-    "db-icon-btn text-red-500 hover:text-red-600 hover:bg-red-500/15 hover:border-red-500/40",
+    "ui-icon-btn text-red-500 hover:text-red-600 hover:bg-red-500/15 hover:border-red-500/40",
 };
 
 export function DatabaseSurface({
@@ -72,5 +72,5 @@ export function DatabaseTextInput({
   className,
   ...props
 }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn("db-input", className)} {...props} />;
+  return <input className={cn("ui-input", className)} {...props} />;
 }

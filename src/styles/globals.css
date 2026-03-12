@@ -161,26 +161,6 @@ body.resizing iframe[data-codex-iframe="true"] {
     @apply border-b border-border bg-background;
   }
 
-  .db-input {
-    @apply h-9 w-full rounded-ui-md border border-border bg-background px-3 text-sm text-foreground;
-    @apply placeholder:text-muted-foreground/70;
-    @apply focus-visible:outline-none focus-visible:border-primary/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/35;
-    transition-property: border-color, background-color, box-shadow;
-    transition-duration: var(--ui-motion-feedback);
-    transition-timing-function: var(--ui-motion-ease);
-  }
-
-  .db-icon-btn {
-    @apply inline-flex h-8 w-8 items-center justify-center rounded-ui-md border border-transparent;
-    @apply focus-visible:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/35;
-    transition-property: transform, background-color, border-color, color, opacity;
-    transition-duration: var(--ui-motion-feedback);
-    transition-timing-function: var(--ui-motion-ease);
-  }
-  .db-icon-btn:active:not(:disabled) {
-    transform: scale(0.97);
-  }
-
   .db-action-btn {
     @apply inline-flex h-9 items-center justify-center gap-1.5 rounded-ui-md bg-primary px-3 text-sm font-medium text-primary-foreground;
     @apply hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50;
@@ -242,8 +222,6 @@ body.resizing iframe[data-codex-iframe="true"] {
   .ui-icon-btn,
   .db-panel,
   .db-menu,
-  .db-input,
-  .db-icon-btn,
   .db-action-btn,
   .db-toggle-btn,
   .db-menu-item,
@@ -269,7 +247,6 @@ body.resizing iframe[data-codex-iframe="true"] {
     animation-duration: 1ms !important;
   }
   .ui-icon-btn:active:not(:disabled),
-  .db-icon-btn:active:not(:disabled),
   .db-action-btn:active:not(:disabled),
   .db-toggle-btn:active:not(:disabled),
   .mode-switcher-btn:active {

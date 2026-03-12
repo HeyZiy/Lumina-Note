@@ -82,7 +82,7 @@ export function DateCell({ value, onChange, isEditing, onBlur, column }: DateCel
         onChange={(e) => setEditValue(e.target.value)}
         onBlur={() => void handleCommit()}
         onKeyDown={handleKeyDown}
-        className="db-input h-9 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
+        className="ui-input h-9 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
       />
     );
   }

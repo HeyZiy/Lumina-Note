@@ -72,7 +72,7 @@ export function UrlCell({ value, onChange, isEditing, onBlur }: UrlCellProps) {
         onBlur={() => void handleCommit()}
         onKeyDown={handleKeyDown}
         placeholder="https://"
-        className="db-input h-9 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
+        className="ui-input h-9 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
       />
     );
   }
@@ -92,7 +92,7 @@ export function UrlCell({ value, onChange, isEditing, onBlur }: UrlCellProps) {
       </span>
       <button
         onClick={handleOpenUrl}
-        className="db-icon-btn h-6 w-6 opacity-0 group-hover:opacity-100"
+        className="ui-icon-btn h-6 w-6 opacity-0 group-hover:opacity-100"
         aria-label={t.common.open}
         title={t.common.open}
       >

@@ -85,7 +85,7 @@ export function MultiSelectCell({ value, onChange, isEditing, onBlur, column, db
                 {option.name}
                 <button
                   onClick={(e) => handleRemove(e, option.id)}
-                  className="db-icon-btn h-4 w-4 border-0 bg-transparent"
+                  className="ui-icon-btn h-4 w-4 border-0 bg-transparent"
                   aria-label={t.common.delete}
                   title={t.common.delete}
                 >
@@ -139,12 +139,12 @@ export function MultiSelectCell({ value, onChange, isEditing, onBlur, column, db
                   if (e.key === 'Enter') handleAddOption();
                 }}
                 placeholder={t.database.newOption}
-                className="db-input h-8 flex-1 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
+                className="ui-input h-8 flex-1 border-transparent bg-transparent px-2 focus-visible:border-transparent focus-visible:shadow-none"
               />
               <button
                 onClick={handleAddOption}
                 disabled={!newOptionName.trim()}
-                className="db-icon-btn h-7 w-7 disabled:opacity-50"
+                className="ui-icon-btn h-7 w-7 disabled:opacity-50"
                 aria-label={t.common.add}
                 title={t.common.add}
               >

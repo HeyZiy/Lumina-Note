@@ -272,7 +272,7 @@ export function DatabaseToolbar({ dbId }: DatabaseToolbarProps) {
               value: e.target.value || null,
             }))
           }
-          className="db-input h-8 min-w-[120px] px-2"
+          className="ui-input h-8 min-w-[120px] px-2"
           aria-label={t.database.filterPanel.value}
         >
           <option value="">{t.database.filterPanel.selectValue}</option>
@@ -461,7 +461,7 @@ export function DatabaseToolbar({ dbId }: DatabaseToolbarProps) {
                               value: getDefaultFilterValue(nextColumn, nextOperator),
                             }));
                           }}
-                          className="db-input h-8 min-w-[132px] px-2"
+                          className="ui-input h-8 min-w-[132px] px-2"
                           aria-label={t.database.filterPanel.column}
                         >
                           {db.columns.map((col) => (
@@ -481,7 +481,7 @@ export function DatabaseToolbar({ dbId }: DatabaseToolbarProps) {
                               value: getDefaultFilterValue(column, nextOperator),
                             }));
                           }}
-                          className="db-input h-8 min-w-[138px] px-2"
+                          className="ui-input h-8 min-w-[138px] px-2"
                           aria-label={t.database.filterPanel.operator}
                         >
                           {operators.map((operator) => (
@@ -585,7 +585,7 @@ export function DatabaseToolbar({ dbId }: DatabaseToolbarProps) {
           <select
             value={activeKanbanGroupColumnId ?? ""}
             onChange={(e) => handleKanbanGroupColumnChange(e.target.value)}
-            className="db-input h-8 min-w-[132px] px-2"
+            className="ui-input h-8 min-w-[132px] px-2"
             aria-label={t.database.kanban.groupBy}
           >
             {kanbanGroupColumns.length === 0 ? (
@@ -607,7 +607,7 @@ export function DatabaseToolbar({ dbId }: DatabaseToolbarProps) {
           <select
             value={activeCalendarDateColumnId ?? ""}
             onChange={(e) => handleCalendarDateColumnChange(e.target.value)}
-            className="db-input h-8 min-w-[132px] px-2"
+            className="ui-input h-8 min-w-[132px] px-2"
             aria-label={t.database.calendar.dateColumn}
           >
             {dateColumns.length === 0 ? (
@@ -625,7 +625,7 @@ export function DatabaseToolbar({ dbId }: DatabaseToolbarProps) {
           <select
             value={activeView.calendarEmptyDateStrategy ?? "show"}
             onChange={(e) => handleCalendarEmptyDateStrategyChange(e.target.value as "show" | "hide")}
-            className="db-input h-8 min-w-[100px] px-2"
+            className="ui-input h-8 min-w-[100px] px-2"
             aria-label={t.database.calendar.emptyDateStrategy}
           >
             <option value="show">{t.database.calendar.emptyDateShow}</option>
