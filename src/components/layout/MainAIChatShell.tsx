@@ -764,9 +764,6 @@ export function MainAIChatShell() {
     if (import.meta.env.DEV && typeof performance !== "undefined") {
       performance.mark("lumina:send:start");
     }
-    if (import.meta.env.DEV) {
-      console.log("[handleSend] Called, chatMode:", chatMode, "input:", input, "isLoading:", isLoading);
-    }
     if (isExportSelectionMode) {
       return;
     }
@@ -782,15 +779,6 @@ export function MainAIChatShell() {
       || shouldBlockForLoading
       || isAgentWaitingApproval
     ) {
-      if (import.meta.env.DEV) {
-        console.log("[handleSend] Blocked: input empty or loading", {
-          overrideMessage,
-          fallbackMessage,
-          referencedCount: referencedFiles.length,
-          quoteCount: textSelections.length,
-          isAgentWaitingApproval,
-        });
-      }
       return;
     }
 
@@ -824,14 +812,12 @@ export function MainAIChatShell() {
 
     if (chatMode === "research") {
       // Deep Research 模式
-      console.log("[DeepResearch] Research mode triggered, topic:", fullMessage);
       // 使用 store 中的 config（已从持久化存储恢复）
       // 处理 model === 'custom' 的情况
       const actualModel = config.model === 'custom' ? (config.customModelId || config.model) : config.model;
       
       // 检查是否启用网络搜索（需要开关打开 + 配置了 Tavily API Key）
       const shouldWebSearch = enableWebSearch && !!config.tavilyApiKey;
-      console.log("[DeepResearch] AI Config:", { ...config, model: actualModel, hasWebSearch: shouldWebSearch });
       
       const researchConfig: DeepResearchConfig = {
         provider: config.provider,

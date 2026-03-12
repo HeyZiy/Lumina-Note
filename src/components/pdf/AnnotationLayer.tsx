@@ -39,10 +39,9 @@ export function AnnotationLayer({
   }, [currentFile, pageIndex]);
   
   // 处理批注点击
-  const handleAnnotationClick = useCallback((ann: Annotation, e: React.MouseEvent) => {
+  const handleAnnotationClick = useCallback((_ann: Annotation, e: React.MouseEvent) => {
     e.stopPropagation();
     // TODO: 可以显示编辑弹窗
-    console.log('Annotation clicked:', ann);
   }, []);
   
   // 处理批注右键菜单

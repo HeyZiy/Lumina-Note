@@ -471,13 +471,11 @@ export function KnowledgeGraph({ className = "", isolatedNode }: KnowledgeGraphP
 
     // 如果有缓存且文件树没变，直接使用缓存
     if (graphCache && graphCache.fileTreeHash === currentHash) {
-      console.log("[Graph] Using cached data");
       applyGraphData(graphCache.nodes, graphCache.edges, showFolders);
       return;
     }
 
     // 否则重新构建
-    console.log("[Graph] Building new graph...");
     await buildGraph();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileTree, buildGraph, applyGraphData]); // showFolders 由专门的 effect 处理

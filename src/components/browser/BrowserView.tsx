@@ -100,12 +100,9 @@ export function BrowserView({
       
       // 如果 tabId 变化了，需要切换 WebView
       if (prevTabId && prevTabId !== tabId) {
-        console.log('[Browser] 标签页切换:', prevTabId, '->', tabId);
-        
         // 隐藏旧的 WebView
         try {
           await invoke('set_browser_webview_visible', { tabId: prevTabId, visible: false });
-          console.log('[Browser] Hiding old WebView:', prevTabId);
         } catch (err) {
           reportOperationError({
             source: "BrowserView.handleTabSwitch",
@@ -140,7 +137,6 @@ export function BrowserView({
                 height: rect.height,
               });
             }
-            console.log('[Browser] Showing existing WebView:', tabId);
           }
         } catch (err) {
           reportOperationError({
@@ -197,7 +193,6 @@ export function BrowserView({
           width: rect.width,
           height: rect.height,
         });
-        console.log('[Browser] WebView created successfully:', tabId, url);
       } else {
         // WebView 已存在，显示并更新位置
         await invoke('set_browser_webview_visible', { tabId, visible: true });
@@ -208,7 +203,6 @@ export function BrowserView({
           width: rect.width,
           height: rect.height,
         });
-        console.log('[Browser] WebView exists, showing and updating position:', tabId);
       }
       
       setWebviewCreated(true);
@@ -288,7 +282,6 @@ export function BrowserView({
         if (isActive) {
           await updateWebviewBounds();
         }
-        console.log('[Browser] WebView visibility updated:', tabId, isActive);
       } catch (err) {
         reportOperationError({
           source: "BrowserView.updateVisibility",
@@ -309,7 +302,6 @@ export function BrowserView({
   useEffect(() => {
     if (prevGlobalHiddenRef.current && !globalHidden && isActive && webviewCreated) {
       // globalHidden 从 true 变为 false，需要更新位置
-      console.log('[Browser] Modal closed, updating WebView position:', tabId);
       updateWebviewBounds();
     }
     prevGlobalHiddenRef.current = globalHidden;

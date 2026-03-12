@@ -461,10 +461,9 @@ export function RightPanel() {
 
   // Listen for tag-clicked events to switch to Tags tab
   useEffect(() => {
-    const handleTagClicked = (e: CustomEvent<{ tag: string }>) => {
+    const handleTagClicked = () => {
       setRightPanelTab("tags");
       // Optionally scroll to or highlight the clicked tag
-      console.log("Tag clicked:", e.detail.tag);
     };
     
     window.addEventListener("tag-clicked", handleTagClicked as EventListener);

@@ -638,7 +638,6 @@ ${reportContent}`;
       
       // 关闭对话框
       setShowSaveDialog(false);
-      console.log('[DeepResearch] Report saved to:', filePath);
     } catch (error) {
       reportOperationError({
         source: "DeepResearchCard.handleSave",

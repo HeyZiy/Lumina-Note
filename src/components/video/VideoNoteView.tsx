@@ -111,13 +111,11 @@ export function VideoNoteView({
         height: rect.height
       });
       setWebviewCreated(true);
-      console.log('[VideoNote] WebView created successfully');
       
       // 延迟启用自动填充（等待 B站页面加载）
       setTimeout(async () => {
         try {
           await invoke('setup_danmaku_autofill', { prefix: danmakuPrefix });
-          console.log('[VideoNote] Danmaku autofill enabled');
         } catch (e) {
           reportOperationError({
             source: "VideoNoteView.createWebview",
@@ -237,7 +235,6 @@ export function VideoNoteView({
         const notePath = getVideoNoteFilePath(vaultPath, noteFile.video.bvid);
         const mdContent = videoNoteToMarkdown(noteFile);
         await saveFile(notePath, mdContent);
-        console.log(`[VideoNote] Auto saved: ${notePath}`);
       } catch (error) {
         reportOperationError({
           source: "VideoNoteView.autoSave",
@@ -275,14 +272,9 @@ export function VideoNoteView({
       
       // 2. 获取弹幕列表
       const allDanmakus = await getDanmakuList(cid);
-      console.log(`[Danmaku] 获取到 ${allDanmakus.length} 条弹幕`);
       
       // 3. 筛选笔记弹幕
       const noteDanmakus = filterNoteDanmakus(allDanmakus, danmakuPrefix);
-      console.log(`[Danmaku] 找到 ${noteDanmakus.length} 条笔记弹幕`);
-      
-      // 显示部分弹幕内容用于调试
-      console.log('[Danmaku] 前10条弹幕:', allDanmakus.slice(0, 10).map(d => d.content));
       
       if (noteDanmakus.length === 0) {
         // 显示更详细的信息
@@ -354,7 +346,6 @@ export function VideoNoteView({
           if (existingContent) {
             const existingNote = parseVideoNoteMd(existingContent);
             if (existingNote) {
-              console.log(`[VideoNote] 加载已有笔记: ${existingNote.notes.length} 条`);
               setNoteFile(existingNote);
               setIsVideoLoaded(true);
               return;
@@ -506,7 +497,6 @@ export function VideoNoteView({
     // 通过 JS 注入直接跳转视频时间（不刷新页面）
     try {
       await invoke('seek_video_time', { seconds });
-      console.log(`[VideoNote] 跳转到 ${formatTimestamp(seconds)}`);
     } catch (error) {
       reportOperationError({
         source: "VideoNoteView.handleSeekTo",
