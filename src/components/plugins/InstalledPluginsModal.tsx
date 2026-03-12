@@ -45,7 +45,12 @@ export function InstalledPluginsModal({ isOpen, onClose }: InstalledPluginsModal
       <div className="relative w-[860px] max-h-[85vh] rounded-xl shadow-2xl overflow-hidden border border-border bg-background/95">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/50">
           <h2 className="text-lg font-semibold text-foreground/90">{t.plugins.modalTitle}</h2>
-          <button onClick={onClose} className="p-2 rounded-full transition-colors hover:bg-muted">
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full transition-colors hover:bg-muted"
+            aria-label={t.common.close}
+            title={t.common.close}
+          >
             <X size={18} className="text-foreground/70" />
           </button>
         </div>

@@ -84,6 +84,7 @@ export function SkillManagerModal({ isOpen, onClose }: SkillManagerModalProps) {
             <button
               onClick={onClose}
               className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors flex items-center gap-1"
+              aria-label={t.common.close}
             >
               <X size={12} />
               {t.ai.skillsManagerClose}
