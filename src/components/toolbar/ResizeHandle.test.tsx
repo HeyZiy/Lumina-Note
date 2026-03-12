@@ -42,4 +42,22 @@ describe("ResizeHandle", () => {
     expect(hitArea.style.left).toBe("-1px");
     expect(hitArea.style.right).toBe("-7px");
   });
+
+  it("keeps the right-side divider hit area expanded and flips drag deltas", () => {
+    const onResize = vi.fn();
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    const { container } = render(<ResizeHandle direction="right" onResize={onResize} />);
+    const hitArea = container.querySelector(".z-30") as HTMLDivElement;
+
+    expect(hitArea.style.left).toBe("-1px");
+    expect(hitArea.style.right).toBe("-7px");
+
+    fireEvent.mouseDown(hitArea, { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 120 });
+    fireEvent.mouseUp(document);
+
+    expect(onResize).toHaveBeenCalledWith(-20);
+  });
 });
