@@ -1,26 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeFile, remove } from "@tauri-apps/plugin-fs";
-import { homeDir, join, tempDir } from "@tauri-apps/api/path";
-import { open as openExternal } from "@tauri-apps/plugin-shell";
-import { platform } from "@tauri-apps/plugin-os";
 import { useTypesettingDocStore } from "@/stores/useTypesettingDocStore";
 import { useFileStore } from "@/stores/useFileStore";
 import {
-  getTypesettingExportPdfBase64,
   getTypesettingFixtureFontPath,
   getTypesettingLayoutText,
-  getTypesettingPreviewPageMm,
-  getTypesettingRenderDocxPdfBase64,
-  getDocToolsStatus,
-  installDocTools,
   isTauriAvailable,
-  TypesettingPreviewBoxMm,
   TypesettingPreviewPageMm,
   TypesettingTextLine,
 } from "@/lib/tauri";
 import { PDFCanvas } from "@/components/pdf/PDFCanvas";
-import { decodeBase64ToBytes } from "@/typesetting/base64";
 import { docxBlocksToHtml, docxHtmlToBlocks } from "@/typesetting/docxHtml";
 import {
   docxBlocksToFontSizePx,
@@ -28,15 +16,8 @@ import {
   docxBlocksToLayoutTextOptions,
   docxBlocksToPlainText,
 } from "@/typesetting/docxText";
-import { buildPreviewPageMmFromDocx, getDefaultPreviewPageMm } from "@/typesetting/previewDefaults";
+import { getDefaultPreviewPageMm } from "@/typesetting/previewDefaults";
 import { docOpFromBeforeInput } from "@/typesetting/docOps";
-import {
-  buildFallbackFontCandidates,
-  buildFamilyFontCandidates,
-  normalizeFontFamily,
-  osKindFromPlatform,
-  OsKind,
-} from "@/typesetting/fontPaths";
 import type {
   DocxBlock,
   DocxPageStyle,
@@ -46,17 +27,14 @@ import {
   DEFAULT_FONT_SIZE_PX,
   DEFAULT_LINE_HEIGHT_PX,
   type LayoutRender,
-  type RenderedLine,
   mmToPx,
   pxToMm,
-  pxToPt,
   boxToPx,
   scaleBoxPx,
   defaultLineHeightForFont,
   ensurePositivePx,
   buildRenderedLines,
   buildRenderedImages,
-  findFirstExistingFontPath,
   resolveDocxImage,
   getUtf8ByteLength,
   expandTabs,
@@ -64,6 +42,8 @@ import {
   buildSegmentsFromBlocks,
 } from "./typesettingUtils";
 import { TypesettingToolbar } from "./TypesettingToolbar";
+import { useTypesettingInit } from "./hooks/useTypesettingInit";
+import { useTypesettingExport } from "./hooks/useTypesettingExport";
 
 declare global {
   interface Window {
@@ -123,25 +103,8 @@ export function TypesettingDocumentPane({ path, onExportReady, autoOpen = true }
     exportDocx,
   } = useTypesettingDocStore();
   const doc = docs[path];
-  const [error, setError] = useState<string | null>(null);
-  const [pageMm, setPageMm] = useState<TypesettingPreviewPageMm | null>(null);
   const [zoom, setZoom] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportingDocx, setExportingDocx] = useState(false);
-  const [exportDocxError, setExportDocxError] = useState<string | null>(null);
-  const [printing, setPrinting] = useState(false);
-  const [printError, setPrintError] = useState<string | null>(null);
-  const [openOfficePreview, setOpenOfficePreview] = useState(false);
-  const [openOfficePdf, setOpenOfficePdf] = useState<Uint8Array | null>(null);
-  const [openOfficeError, setOpenOfficeError] = useState<string | null>(null);
-  const [openOfficeLoading, setOpenOfficeLoading] = useState(false);
-  const [openOfficeTotalPages, setOpenOfficeTotalPages] = useState(0);
-  const [openOfficeStale, setOpenOfficeStale] = useState(false);
-  const [openOfficeAutoRefresh, setOpenOfficeAutoRefresh] = useState(false);
-  const openOfficeRefreshRef = useRef<number | null>(null);
-  const [docToolsInstalling, setDocToolsInstalling] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [bodyLayout, setBodyLayout] = useState<LayoutRender | null>(null);
@@ -156,106 +119,20 @@ export function TypesettingDocumentPane({ path, onExportReady, autoOpen = true }
   const [pageMounted, setPageMounted] = useState(false);
   const editableRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
-  const fontPathCache = useRef(new Map<string, string>());
   const layoutRunRef = useRef(0);
-  const osContextRef = useRef<Promise<{ os: OsKind; homeDir?: string }> | null>(null);
-  const exportReady = Boolean(pageMm && pageMounted);
+
+  const { error, pageMm, findFallbackFontPath, resolveFontPath } = useTypesettingInit(
+    path,
+    doc,
+    autoOpen,
+    tauriAvailable,
+    openDoc,
+  );
 
   const handlePageRef = useCallback((node: HTMLDivElement | null) => {
     pageRef.current = node;
     setPageMounted(Boolean(node));
   }, []);
-
-  useEffect(() => {
-    if (!autoOpen) return;
-    if (doc) return;
-    openDoc(path).catch((err) => setError(String(err)));
-  }, [autoOpen, doc, openDoc, path]);
-
-  useEffect(() => {
-    if (doc && error) {
-      setError(null);
-    }
-  }, [doc, error]);
-
-  useEffect(() => {
-    let active = true;
-    if (doc?.pageStyle) {
-      setPageMm(buildPreviewPageMmFromDocx(doc.pageStyle));
-      return () => {
-        active = false;
-      };
-    }
-    getTypesettingPreviewPageMm()
-      .then((data) => {
-        if (active) {
-          setPageMm(data);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          console.warn("Typesetting preview fallback:", err);
-          setPageMm(getDefaultPreviewPageMm());
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [doc?.pageStyle]);
-
-  const getOsContext = async (): Promise<{ os: OsKind; homeDir?: string }> => {
-    if (!osContextRef.current) {
-      osContextRef.current = (async () => {
-        let os: OsKind = "unknown";
-        try {
-          os = osKindFromPlatform(await platform());
-        } catch {
-          // Ignore platform detection errors.
-        }
-        if (os === "unknown" && typeof navigator !== "undefined") {
-          const ua = navigator.userAgent.toLowerCase();
-          if (ua.includes("mac")) os = "macos";
-          else if (ua.includes("win")) os = "windows";
-          else if (ua.includes("linux")) os = "linux";
-        }
-
-        let resolvedHome: string | undefined;
-        if (tauriAvailable) {
-          try {
-            resolvedHome = await homeDir();
-          } catch {
-            // Ignore home dir errors; fallback paths will skip HOME entries.
-          }
-        }
-        return { os, homeDir: resolvedHome };
-      })();
-    }
-    return osContextRef.current;
-  };
-
-  const findFallbackFontPath = async (): Promise<string | null> => {
-    const { os, homeDir } = await getOsContext();
-    const candidates = buildFallbackFontCandidates(os, homeDir);
-    return findFirstExistingFontPath(candidates);
-  };
-
-  const resolveFontPath = async (
-    family: string | undefined,
-    fallbackPath: string,
-  ): Promise<string> => {
-    if (!tauriAvailable) return fallbackPath;
-    if (!family) return fallbackPath;
-    const normalized = normalizeFontFamily(family);
-    const cached = fontPathCache.current.get(normalized);
-    if (cached) {
-      return cached;
-    }
-    const { os, homeDir } = await getOsContext();
-    const candidates = buildFamilyFontCandidates(family, os, homeDir);
-    const resolved = (await findFirstExistingFontPath(candidates)) ?? fallbackPath;
-    fontPathCache.current.set(normalized, resolved);
-    return resolved;
-  };
 
   useEffect(() => {
     if (!doc || !pageMm) {
@@ -719,10 +596,6 @@ export function TypesettingDocumentPane({ path, onExportReady, autoOpen = true }
     pageMm,
   ]);
 
-  const displayTotalPages = openOfficePreview && openOfficeTotalPages > 0
-    ? openOfficeTotalPages
-    : totalPages;
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!window.__luminaTypesettingHarness) return;
@@ -776,17 +649,6 @@ export function TypesettingDocumentPane({ path, onExportReady, autoOpen = true }
     };
   }, [bodyLayout, bodyLineStyles, doc, footerLayout, headerLayout, pageMm, path, totalPages]);
 
-  useEffect(() => {
-    setCurrentPage((prev) => Math.min(Math.max(1, prev), displayTotalPages));
-  }, [displayTotalPages]);
-
-  useEffect(() => {
-    if (!openOfficePreview) return;
-    if (doc?.isDirty) {
-      setOpenOfficeStale(true);
-    }
-  }, [doc?.isDirty, openOfficePreview]);
-
   const handleInput = () => {
     if (!editableRef.current) return;
     const blocks = docxHtmlToBlocks(editableRef.current);
@@ -816,359 +678,62 @@ export function TypesettingDocumentPane({ path, onExportReady, autoOpen = true }
     measureFallbackHeight();
   };
 
-  const waitForNextPaint = () =>
-    new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-
-  const renderPagesToPdfBytes = useCallback(async (): Promise<Uint8Array | null> => {
-    if (!pageMm) return null;
-    if (isEditing) {
-      editableRef.current?.blur();
-      setIsEditing(false);
-      await waitForNextPaint();
-    }
-    const [{ default: jsPDF }, html2canvasModule] = await Promise.all([
-      import("jspdf"),
-      bodyUsesEngine ? Promise.resolve(null) : import("html2canvas"),
-    ]);
-    const pageWidthMm = pageMm.page.width_mm;
-    const pageHeightMm = pageMm.page.height_mm;
-    const orientation = pageWidthMm > pageHeightMm ? "landscape" : "portrait";
-    const pdf = new jsPDF({
-      orientation,
-      unit: "mm",
-      format: [pageWidthMm, pageHeightMm],
-      compress: true,
-    });
-    const fontAsset = typeof window !== "undefined" ? window.__luminaTypesettingFont : undefined;
-    if (fontAsset?.data) {
-      try {
-        pdf.addFileToVFS(fontAsset.fileName, fontAsset.data);
-        pdf.addFont(fontAsset.fileName, fontAsset.name, "normal");
-        pdf.setFont(fontAsset.name, "normal");
-      } catch {
-        // Keep default font if custom font fails to load.
-      }
-    }
-    const bodyHeightPx = bodyPageHeightPx ?? mmToPx(pageMm.body.height_mm);
-
-    const drawLines = (
-      lines: RenderedLine[],
-      offsetMm: TypesettingPreviewBoxMm,
-      fallbackFontSizePx: number,
-    ) => {
-      for (const line of lines) {
-        const fontSizePx = line.fontSizePx ?? fallbackFontSizePx;
-        const xMm = offsetMm.x_mm + pxToMm(line.x);
-        const yMm = offsetMm.y_mm + pxToMm(line.y);
-        pdf.setFontSize(pxToPt(fontSizePx));
-        pdf.text(line.text, xMm, yMm, { baseline: "top" });
-        if (line.underline) {
-          const underlineY = yMm + pxToMm(fontSizePx * 0.9);
-          const underlineWidth = pxToMm(line.width);
-          pdf.setLineWidth(0.2);
-          pdf.line(xMm, underlineY, xMm + underlineWidth, underlineY);
-        }
-      }
-    };
-
-    if (bodyUsesEngine) {
-      const fallbackFontSizePx = bodyLayout?.fontSizePx ?? DEFAULT_FONT_SIZE_PX;
-      const headerFontSizePx = headerLayout?.fontSizePx ?? DEFAULT_FONT_SIZE_PX;
-      const footerFontSizePx = footerLayout?.fontSizePx ?? DEFAULT_FONT_SIZE_PX;
-      for (let page = 1; page <= totalPages; page += 1) {
-        if (page > 1) {
-          pdf.addPage();
-        }
-        const pageStart = (page - 1) * bodyHeightPx;
-        const pageEnd = pageStart + bodyHeightPx;
-        const pageBodyLines = bodyLines
-          .filter((line) => {
-            const lineHeight = line.lineHeightPx ?? bodyLayout?.lineHeightPx ?? DEFAULT_LINE_HEIGHT_PX;
-            return line.y + lineHeight > pageStart && line.y < pageEnd;
-          })
-          .map((line) => ({
-            ...line,
-            y: line.y - pageStart,
-          }));
-        drawLines(pageBodyLines, pageMm.body, fallbackFontSizePx);
-        if (headerLines.length > 0) {
-          drawLines(headerLines, pageMm.header, headerFontSizePx);
-        }
-        if (footerLines.length > 0) {
-          drawLines(footerLines, pageMm.footer, footerFontSizePx);
-        }
-      }
-      return new Uint8Array(pdf.output("arraybuffer"));
-    }
-
-    if (!pageRef.current || !html2canvasModule) return null;
-    const html2canvas = html2canvasModule.default;
-    const originalPage = currentPage;
-    const originalScrollTop = editableRef.current?.scrollTop ?? 0;
-    for (let page = 1; page <= totalPages; page += 1) {
-      if (!pageRef.current) break;
-      if (page !== currentPage) {
-        setCurrentPage(page);
-        await waitForNextPaint();
-      }
-      if (!bodyUsesEngine && editableRef.current && bodyHeightPx > 0) {
-        editableRef.current.scrollTop = (page - 1) * bodyHeightPx;
-        await waitForNextPaint();
-      }
-      const canvas = await html2canvas(pageRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-      });
-      if (page > 1) {
-        pdf.addPage();
-      }
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
-      pdf.addImage(imgData, "JPEG", 0, 0, pageWidthMm, pageHeightMm);
-    }
-    if (!bodyUsesEngine && editableRef.current) {
-      editableRef.current.scrollTop = originalScrollTop;
-      await waitForNextPaint();
-    }
-    if (originalPage !== currentPage) {
-      setCurrentPage(originalPage);
-      await waitForNextPaint();
-    }
-    return new Uint8Array(pdf.output("arraybuffer"));
-  }, [
+  const {
+    exporting,
+    exportError,
+    exportingDocx,
+    exportDocxError,
+    printing,
+    printError,
+    openOfficePreview,
+    openOfficePdf,
+    openOfficeError,
+    openOfficeLoading,
+    openOfficeTotalPages,
+    setOpenOfficeTotalPages,
+    openOfficeStale,
+    openOfficeAutoRefresh,
+    setOpenOfficeAutoRefresh,
+    docToolsInstalling,
+    handleExport,
+    handleExportDocx,
+    handlePrint,
+    handleToggleOpenOfficePreview,
+    handleRefreshOpenOfficePreview,
+    handleInstallDocTools,
+  } = useTypesettingExport({
+    path,
+    doc,
+    pageMm,
     bodyLayout,
     bodyLines,
-    bodyPageHeightPx,
-    bodyUsesEngine,
-    currentPage,
-    footerLayout,
-    footerLines,
+    bodyLineStyles,
     headerLayout,
     headerLines,
-    isEditing,
-    pageMm,
+    footerLayout,
+    footerLines,
+    bodyPageHeightPx,
+    bodyUsesEngine,
     totalPages,
-  ]);
-
-  const ensureOpenOfficeAvailable = useCallback(async (): Promise<boolean> => {
-    if (!tauriAvailable) {
-      setOpenOfficeError("OpenOffice preview requires desktop app.");
-      return false;
-    }
-    try {
-      const status = await getDocToolsStatus();
-      const soffice = status.tools?.soffice;
-      if (!soffice?.available) {
-        setOpenOfficeError("soffice not available. Install doc tools.");
-        return false;
-      }
-      return true;
-    } catch (err) {
-      setOpenOfficeError(String(err));
-      return false;
-    }
-  }, [tauriAvailable]);
-
-  const renderOpenOfficePdfBytes = useCallback(async (): Promise<Uint8Array | null> => {
-    const available = await ensureOpenOfficeAvailable();
-    if (!available) return null;
-    if (!doc) {
-      setOpenOfficeError("OpenOffice preview requires a document.");
-      return null;
-    }
-    setOpenOfficeError(null);
-    setOpenOfficeLoading(true);
-    let tempDocxPath: string | null = null;
-    try {
-      const tempRoot = await tempDir();
-      const docxPath = await join(
-        tempRoot,
-        `lumina-openoffice-${Date.now()}.docx`,
-      );
-      tempDocxPath = docxPath;
-      await exportDocx(path, docxPath);
-      const payload = await getTypesettingRenderDocxPdfBase64(docxPath);
-      const bytes = decodeBase64ToBytes(payload);
-      setOpenOfficePdf(bytes);
-      setOpenOfficeStale(false);
-      return bytes;
-    } catch (err) {
-      const reason = String(err);
-      setOpenOfficeError(reason);
-      return null;
-    } finally {
-      if (tempDocxPath) {
-        try {
-          await remove(tempDocxPath);
-        } catch {
-          // ignore cleanup errors
-        }
-      }
-      setOpenOfficeLoading(false);
-    }
-  }, [doc, ensureOpenOfficeAvailable, exportDocx, path]);
-
-  const getExportPdfBytes = useCallback(async (): Promise<Uint8Array> => {
-    if (openOfficePreview) {
-      const openOffice = openOfficePdf ?? await renderOpenOfficePdfBytes();
-      if (openOffice) {
-        return openOffice;
-      }
-    }
-    const rendered = await renderPagesToPdfBytes();
-    if (rendered) return rendered;
-    const payload = await getTypesettingExportPdfBase64();
-    return decodeBase64ToBytes(payload);
-  }, [openOfficePdf, openOfficePreview, renderOpenOfficePdfBytes, renderPagesToPdfBytes]);
-
-  const handleToggleOpenOfficePreview = async () => {
-    if (openOfficePreview) {
-      setOpenOfficePreview(false);
-      setOpenOfficeTotalPages(0);
-      return;
-    }
-    setOpenOfficePreview(true);
-    if (!openOfficePdf || openOfficeStale) {
-      await renderOpenOfficePdfBytes();
-    }
-  };
-
-  const handleRefreshOpenOfficePreview = async () => {
-    setOpenOfficePreview(true);
-    await renderOpenOfficePdfBytes();
-  };
-
-  const handleInstallDocTools = async () => {
-    if (!tauriAvailable) return;
-    setDocToolsInstalling(true);
-    try {
-      await installDocTools();
-      setOpenOfficeError(null);
-      if (openOfficePreview) {
-        await renderOpenOfficePdfBytes();
-      }
-    } catch (err) {
-      setOpenOfficeError(String(err));
-    } finally {
-      setDocToolsInstalling(false);
-    }
-  };
-
-  useEffect(() => {
-    setOpenOfficePdf(null);
-    setOpenOfficeTotalPages(0);
-    setOpenOfficeError(null);
-    setOpenOfficeStale(false);
-    if (openOfficePreview && openOfficeAutoRefresh) {
-      renderOpenOfficePdfBytes().catch(() => null);
-    }
-  }, [openOfficeAutoRefresh, openOfficePreview, path, renderOpenOfficePdfBytes]);
-
-  const scheduleOpenOfficeRefresh = useCallback(() => {
-    if (!openOfficePreview || !openOfficeAutoRefresh) return;
-    if (openOfficeLoading) return;
-    if (!doc?.isDirty) return;
-    if (isEditing) return;
-
-    setOpenOfficeStale(true);
-    if (openOfficeRefreshRef.current) {
-      clearTimeout(openOfficeRefreshRef.current);
-    }
-    openOfficeRefreshRef.current = window.setTimeout(() => {
-      renderOpenOfficePdfBytes().catch(() => null);
-    }, 1200);
-  }, [
-    doc?.isDirty,
     isEditing,
-    openOfficeAutoRefresh,
-    openOfficeLoading,
-    openOfficePreview,
-    renderOpenOfficePdfBytes,
-  ]);
+    setIsEditing,
+    currentPage,
+    setCurrentPage,
+    editableRef,
+    pageRef,
+    tauriAvailable,
+    exportDocx,
+    onExportReady,
+    pageMounted,
+  });
+
+  const displayTotalPages = openOfficePreview && openOfficeTotalPages > 0
+    ? openOfficeTotalPages
+    : totalPages;
 
   useEffect(() => {
-    scheduleOpenOfficeRefresh();
-    return () => {
-      if (openOfficeRefreshRef.current) {
-        clearTimeout(openOfficeRefreshRef.current);
-      }
-    };
-  }, [doc?.lastOp, doc?.isDirty, scheduleOpenOfficeRefresh]);
-
-  useEffect(() => {
-    if (!onExportReady) return;
-    if (!exportReady) {
-      onExportReady(null);
-      return;
-    }
-    onExportReady(getExportPdfBytes);
-    return () => {
-      onExportReady(null);
-    };
-  }, [exportReady, getExportPdfBytes, onExportReady]);
-
-  const handleExport = async () => {
-    setExportError(null);
-    setExporting(true);
-    try {
-      const filePath = await save({
-        defaultPath: "typesetting-export.pdf",
-        filters: [{ name: "PDF", extensions: ["pdf"] }],
-      });
-      if (!filePath) return;
-      const bytes = await getExportPdfBytes();
-      await writeFile(filePath, bytes);
-    } catch (err) {
-      console.error("Typesetting PDF export failed:", err);
-      setExportError("Export failed.");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportDocx = async () => {
-    setExportDocxError(null);
-    setExportingDocx(true);
-    try {
-      const defaultPath = doc?.path
-        ? doc.path.replace(/\.docx$/i, "-export.docx")
-        : "typesetting-export.docx";
-      const filePath = await save({
-        defaultPath,
-        filters: [{ name: "Word Document", extensions: ["docx"] }],
-      });
-      if (!filePath) return;
-      await exportDocx(path, filePath);
-    } catch (err) {
-      console.error("Typesetting DOCX export failed:", err);
-      setExportDocxError("Export failed.");
-    } finally {
-      setExportingDocx(false);
-    }
-  };
-
-  const handlePrint = async () => {
-    setPrintError(null);
-    setPrinting(true);
-    try {
-      const tempRoot = await tempDir();
-      const filePath = await join(
-        tempRoot,
-        `lumina-typesetting-print-${Date.now()}.pdf`,
-      );
-      const bytes = await getExportPdfBytes();
-      await writeFile(filePath, bytes);
-      await openExternal(filePath);
-    } catch (err) {
-      console.error("Typesetting print failed:", err);
-      setPrintError("Print failed.");
-    } finally {
-      setPrinting(false);
-    }
-  };
+    setCurrentPage((prev) => Math.min(Math.max(1, prev), displayTotalPages));
+  }, [displayTotalPages]);
 
   if (error) {
     return (
