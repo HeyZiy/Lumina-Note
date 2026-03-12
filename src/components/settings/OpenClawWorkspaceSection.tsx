@@ -78,7 +78,7 @@ export function OpenClawWorkspaceSection() {
     mountedWorkspacePath,
   );
   const hasSelectedWorkspacePath = targetWorkspacePath !== null;
-  const shouldShowSnapshot = hasSelectedWorkspacePath && snapshot !== null;
+  const shouldShowSnapshot = snapshot !== null;
 
   const visibleError = actionError ?? lastError ?? (shouldShowSnapshot ? snapshot?.error ?? null : null);
 
@@ -198,14 +198,12 @@ export function OpenClawWorkspaceSection() {
   };
 
   const handleRescan = async () => {
-    if (!targetWorkspacePath) {
-      setActionError(t.settingsModal.openClawPathRequiredDesc);
-      return;
-    }
+    const scanPath = targetWorkspacePath ?? vaultPath;
+    if (!scanPath) return;
     try {
       setActionError(null);
       await refreshWorkspace(vaultPath, {
-        workspacePath: targetWorkspacePath,
+        workspacePath: scanPath,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -245,7 +243,7 @@ export function OpenClawWorkspaceSection() {
           <button
             type="button"
             onClick={() => void handleRescan()}
-            disabled={!vaultPath || isRefreshing || !integrationEnabled || !hasSelectedWorkspacePath}
+            disabled={!vaultPath || isRefreshing || !integrationEnabled}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background/60 px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
             <RefreshCw size={12} className={isRefreshing ? "animate-spin" : undefined} />

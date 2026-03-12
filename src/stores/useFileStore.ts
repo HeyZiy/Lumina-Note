@@ -358,12 +358,7 @@ export const useFileStore = create<FileState>()(
           const tree = await listDirectory(path);
           set({ fileTree: tree, isLoadingTree: false });
           const openClawStore = useOpenClawWorkspaceStore.getState();
-          if (
-            !openClawStore.getAttachment(path) ||
-            openClawStore.getMountedWorkspacePath(path) === path
-          ) {
-            openClawStore.refreshAttachmentScan(path, tree, path);
-          }
+          await openClawStore.refreshWorkspace(path, { fileTree: tree });
           await get().syncMobileWorkspace({ path, force: true });
         } catch (error) {
           reportOperationError({
@@ -387,12 +382,7 @@ export const useFileStore = create<FileState>()(
           const tree = await listDirectory(vaultPath);
           set({ fileTree: tree, isLoadingTree: false });
           const openClawStore = useOpenClawWorkspaceStore.getState();
-          if (
-            !openClawStore.getAttachment(vaultPath) ||
-            openClawStore.getMountedWorkspacePath(vaultPath) === vaultPath
-          ) {
-            openClawStore.refreshAttachmentScan(vaultPath, tree, vaultPath);
-          }
+          await openClawStore.refreshWorkspace(vaultPath, { fileTree: tree });
           useFavoriteStore.getState().pruneMissing(tree);
           void get().syncMobileWorkspace();
         } catch (error) {
