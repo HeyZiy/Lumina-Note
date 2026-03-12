@@ -39,6 +39,7 @@ import { useUIStore } from "@/stores/useUIStore";
 import { useSplitStore } from "@/stores/useSplitStore";
 import { useFavoriteStore } from "@/stores/useFavoriteStore";
 import { useOpenClawWorkspaceStore } from "@/stores/useOpenClawWorkspaceStore";
+import { ensureOpenClawTodayMemoryNote } from "@/services/openclaw/workspace";
 import { reportOperationError } from "@/lib/reportError";
 import { useShallow } from "zustand/react/shallow";
 import { SIDEBAR_SURFACE_CLASSNAME } from "./sidebarSurface";
@@ -1073,7 +1074,6 @@ export function Sidebar() {
               { label: "AGENTS.md", path: join(openClawSnapshot.workspacePath, "AGENTS.md") },
               { label: "SOUL.md", path: join(openClawSnapshot.workspacePath, "SOUL.md") },
               { label: "USER.md", path: join(openClawSnapshot.workspacePath, "USER.md") },
-              { label: t.sidebar.openClawTodayMemory, path: openClawSnapshot.todayMemoryPath },
             ].map((entry) => (
               <button
                 key={entry.label}
@@ -1084,6 +1084,13 @@ export function Sidebar() {
                 {entry.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => void ensureOpenClawTodayMemoryNote(openClawSnapshot.workspacePath).then(openFile)}
+              className="truncate rounded-md border border-border bg-background/60 px-2 py-1 text-left text-[11px] text-foreground hover:bg-accent"
+            >
+              {t.sidebar.openClawTodayMemory}
+            </button>
           </div>
 
           <div className="mb-2 space-y-1">

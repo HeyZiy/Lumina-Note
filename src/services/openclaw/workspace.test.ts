@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const existsMock = vi.hoisted(() => vi.fn<[string], Promise<boolean>>());
 const createDirMock = vi.hoisted(() => vi.fn<[string, { recursive?: boolean }?], Promise<void>>());
 const saveFileMock = vi.hoisted(() => vi.fn<[string, string], Promise<void>>());
+const homeDirMock = vi.hoisted(() => vi.fn<[], Promise<string>>());
 
 vi.mock("@/lib/tauri", () => ({
   exists: existsMock,
@@ -10,8 +11,13 @@ vi.mock("@/lib/tauri", () => ({
   saveFile: saveFileMock,
 }));
 
+vi.mock("@tauri-apps/api/path", () => ({
+  homeDir: homeDirMock,
+}));
+
 import {
   buildOpenClawTodayMemoryPath,
+  discoverSystemOpenClawPath,
   ensureOpenClawTodayMemoryNote,
   inspectOpenClawWorkspace,
   inspectOpenClawWorkspaceTree,
@@ -24,8 +30,10 @@ describe("openclaw workspace helpers", () => {
     existsMock.mockReset();
     createDirMock.mockReset();
     saveFileMock.mockReset();
+    homeDirMock.mockReset();
     createDirMock.mockResolvedValue(undefined);
     saveFileMock.mockResolvedValue(undefined);
+    homeDirMock.mockResolvedValue("/Users/test");
   });
 
   it("detects a workspace when required markers exist", async () => {
@@ -162,5 +170,34 @@ describe("openclaw workspace helpers", () => {
     expect(snapshot.bridgeNotePaths).toEqual([
       "/tmp/openclaw/.lumina/openclaw-bridge-note-2026-03-11.md",
     ]);
+  });
+
+  describe("discoverSystemOpenClawPath", () => {
+    it("returns workspace path when AGENTS.md probe exists", async () => {
+      existsMock.mockImplementation(async (path: string) =>
+        path === "/Users/test/.openclaw/workspace/AGENTS.md",
+      );
+
+      const result = await discoverSystemOpenClawPath();
+
+      expect(result).toBe("/Users/test/.openclaw/workspace");
+      expect(existsMock).toHaveBeenCalledWith("/Users/test/.openclaw/workspace/AGENTS.md");
+    });
+
+    it("returns null when AGENTS.md probe does not exist", async () => {
+      existsMock.mockResolvedValue(false);
+
+      const result = await discoverSystemOpenClawPath();
+
+      expect(result).toBeNull();
+    });
+
+    it("returns null when homeDir throws", async () => {
+      homeDirMock.mockRejectedValue(new Error("not available"));
+
+      const result = await discoverSystemOpenClawPath();
+
+      expect(result).toBeNull();
+    });
   });
 });

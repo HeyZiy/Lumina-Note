@@ -5,6 +5,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import { useFileStore } from "@/stores/useFileStore";
 import { useOpenClawWorkspaceStore } from "@/stores/useOpenClawWorkspaceStore";
+import { ensureOpenClawTodayMemoryNote } from "@/services/openclaw/workspace";
 import { getFileName } from "@/lib/utils";
 import { join } from "@/lib/path";
 import { openFilteredView } from "@/lib/events";
@@ -104,7 +105,7 @@ export function OverviewDashboard() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => void openFile(snapshot.todayMemoryPath)}
+                          onClick={() => void ensureOpenClawTodayMemoryNote(snapshot.workspacePath).then(openFile)}
                           className="rounded-md border border-border bg-background/70 px-3 py-1.5 text-xs text-foreground hover:bg-accent"
                         >
                           {t.overview.openClawTodayMemory}

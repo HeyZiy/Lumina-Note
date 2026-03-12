@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
+  discoverSystemOpenClawPath,
   inspectOpenClawWorkspace,
   inspectOpenClawWorkspaceTree,
   type OpenClawWorkspaceSnapshot,
@@ -168,9 +169,20 @@ export const useOpenClawWorkspaceStore = create<OpenClawWorkspaceState>()(
 
         set({ activeHostWorkspacePath: hostWorkspacePath, isRefreshing: true, lastError: null });
         try {
-          const snapshot = options?.fileTree
+          let snapshot = options?.fileTree
             ? inspectOpenClawWorkspaceTree(targetWorkspacePath, options.fileTree)
             : await inspectOpenClawWorkspace(targetWorkspacePath);
+
+          // Fallback: if vault itself has no OpenClaw markers and no external
+          // workspace is mounted, probe the system-standard install path.
+          if (snapshot.status === "not-detected" && targetWorkspacePath === hostWorkspacePath) {
+            const systemPath = await discoverSystemOpenClawPath();
+            if (systemPath) {
+              await syncWorkspaceAccessRoots([systemPath]);
+              snapshot = await inspectOpenClawWorkspace(systemPath);
+            }
+          }
+
           set((state) => ({
             snapshotsByHostPath: {
               ...state.snapshotsByHostPath,

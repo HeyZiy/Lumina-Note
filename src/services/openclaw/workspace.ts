@@ -1,3 +1,4 @@
+import { homeDir } from "@tauri-apps/api/path";
 import { join } from "@/lib/path";
 import { createDir, exists, saveFile } from "@/lib/tauri";
 import type { FileEntry } from "@/lib/tauri";
@@ -43,6 +44,24 @@ export interface OpenClawWorkspaceSnapshot {
   indexingScope: "shared-workspace";
   gatewayEnabled: boolean;
   error: string | null;
+}
+
+/**
+ * Check the system-standard OpenClaw install path (~/.openclaw/workspace)
+ * for the AGENTS.md probe file. Returns the workspace path if found, null otherwise.
+ */
+export async function discoverSystemOpenClawPath(): Promise<string | null> {
+  try {
+    const home = await homeDir();
+    const workspacePath = join(home, ".openclaw", "workspace");
+    const probe = join(workspacePath, "AGENTS.md");
+    if (await exists(probe)) {
+      return workspacePath;
+    }
+  } catch {
+    // homeDir() can throw in non-Tauri environments; ignore.
+  }
+  return null;
 }
 
 function formatLocalDate(date: Date): string {
