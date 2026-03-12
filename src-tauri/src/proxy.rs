@@ -52,13 +52,22 @@ impl ProxyState {
         let new_client = build_client(proxy)?;
         {
             let mut cfg = self.config.write().await;
-            cfg.proxy_url = proxy_url;
+            cfg.proxy_url = proxy_url.clone();
             cfg.enabled = enabled;
         }
         {
             let mut c = self.client.write().await;
             *c = new_client;
         }
+
+        if enabled && !proxy_url.is_empty() {
+            std::env::set_var("HTTP_PROXY", &proxy_url);
+            std::env::set_var("HTTPS_PROXY", &proxy_url);
+        } else {
+            std::env::remove_var("HTTP_PROXY");
+            std::env::remove_var("HTTPS_PROXY");
+        }
+
         Ok(())
     }
 
@@ -173,5 +182,33 @@ mod tests {
         let config = state.get_config().await;
         assert!(config.enabled);
         assert_eq!(config.proxy_url, "http://127.0.0.1:7890");
+
+        state.set_config(String::new(), false).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn proxy_state_set_config_updates_process_proxy_env_vars() {
+        let state = ProxyState::new();
+        std::env::remove_var("HTTP_PROXY");
+        std::env::remove_var("HTTPS_PROXY");
+
+        state
+            .set_config("http://127.0.0.1:7890".into(), true)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            std::env::var("HTTP_PROXY").as_deref(),
+            Ok("http://127.0.0.1:7890")
+        );
+        assert_eq!(
+            std::env::var("HTTPS_PROXY").as_deref(),
+            Ok("http://127.0.0.1:7890")
+        );
+
+        state.set_config(String::new(), false).await.unwrap();
+
+        assert!(std::env::var("HTTP_PROXY").is_err());
+        assert!(std::env::var("HTTPS_PROXY").is_err());
     }
 }

@@ -256,7 +256,11 @@ async fn execute_task_inner(
         },
     );
 
-    let http_client = app.state::<crate::proxy::ProxyState>().client().await;
+    let http_client = app
+        .state::<crate::proxy::ProxyState>()
+        .client_with_timeout(std::time::Duration::from_secs(300))
+        .await
+        .map_err(|e| format!("Failed to build LLM HTTP client: {e}"))?;
     let result = run_forge_loop(
         app.clone(),
         config,
