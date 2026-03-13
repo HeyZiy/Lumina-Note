@@ -15,9 +15,14 @@ fn macos_uses_creation_time_overlay_titlebar_config() {
     assert!(macos_config.contains("\"decorations\": true"));
     assert!(macos_config.contains("\"titleBarStyle\": \"Overlay\""));
     assert!(macos_config.contains("\"hiddenTitle\": true"));
-    assert!(macos_config.contains("\"trafficLightPosition\""));
-    assert!(macos_config.contains("\"x\": 14"));
-    assert!(macos_config.contains("\"y\": 16"));
+    // trafficLightPosition is now computed at runtime, not in static config
+    assert!(!macos_config.contains("trafficLightPosition"));
     assert!(!main_rs.contains("window.set_decorations(true)"));
     assert!(!main_rs.contains("window.set_title_bar_style(TitleBarStyle::Overlay)"));
+}
+
+#[test]
+fn main_rs_wires_traffic_lights_module() {
+    let main_rs = read_config("src/main.rs");
+    assert!(main_rs.contains("traffic_lights"));
 }
