@@ -99,7 +99,8 @@ export function Sidebar() {
     handleSelectRoot,
     getContextMenuItems,
     getRootContextMenuItems,
-    getMoreMenuItems,
+    handleOpenFolder,
+    handleNewWindow,
     toggleExpanded,
     toggleMountedExpanded,
     handleNewFile,
@@ -113,7 +114,6 @@ export function Sidebar() {
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [rootContextMenu, setRootContextMenu] = useState<RootContextMenuState | null>(null);
-  const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
   const [isRootDragOver, setIsRootDragOver] = useState(false);
   const [isFileTreeScrollActive, setIsFileTreeScrollActive] = useState(false);
   const fileTreeScrollFadeTimerRef = useRef<number | null>(null);
@@ -144,7 +144,6 @@ export function Sidebar() {
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
     setRootContextMenu(null);
-    setMoreMenu(null);
   }, []);
 
   // Root drop listener
@@ -229,7 +228,8 @@ export function Sidebar() {
         onNewFolder={() => handleNewFolder()}
         onRefresh={refreshFileTree}
         isLoadingTree={isLoadingTree}
-        onMoreMenu={(pos) => setMoreMenu(pos)}
+        onOpenFolder={handleOpenFolder}
+        onNewWindow={handleNewWindow}
       />
 
       {/* Quick Actions */}
@@ -478,16 +478,6 @@ export function Sidebar() {
           x={rootContextMenu.x}
           y={rootContextMenu.y}
           items={getRootContextMenuItems()}
-          onClose={closeContextMenu}
-        />
-      )}
-
-      {/* More Menu */}
-      {moreMenu && (
-        <ContextMenu
-          x={moreMenu.x}
-          y={moreMenu.y}
-          items={getMoreMenuItems()}
           onClose={closeContextMenu}
         />
       )}

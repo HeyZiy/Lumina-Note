@@ -1,9 +1,10 @@
 import { cn } from "@/lib/utils";
 import { useLocaleStore } from "@/stores/useLocaleStore";
 import {
+  AppWindow,
   FilePlus,
+  FolderOpen,
   FolderPlus,
-  MoreHorizontal,
   RefreshCw,
   Shapes,
 } from "lucide-react";
@@ -14,7 +15,8 @@ interface SidebarHeaderProps {
   onNewFolder: () => void;
   onRefresh: () => void;
   isLoadingTree: boolean;
-  onMoreMenu: (pos: { x: number; y: number }) => void;
+  onOpenFolder: () => void;
+  onNewWindow: () => void;
 }
 
 export function SidebarHeader({
@@ -23,7 +25,8 @@ export function SidebarHeader({
   onNewFolder,
   onRefresh,
   isLoadingTree,
-  onMoreMenu,
+  onOpenFolder,
+  onNewWindow,
 }: SidebarHeaderProps) {
   const { t } = useLocaleStore();
 
@@ -31,6 +34,20 @@ export function SidebarHeader({
     <div className="p-3 flex items-center justify-between text-[10px] font-semibold text-muted-foreground tracking-[0.2em] uppercase">
       <span className="ui-compact-text ui-compact-hide-md">{t.sidebar.files}</span>
       <div className="flex items-center gap-1">
+        <button
+          onClick={onOpenFolder}
+          className="w-7 h-7 ui-icon-btn"
+          title={t.file.openFolder}
+        >
+          <FolderOpen className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onNewWindow}
+          className="w-7 h-7 ui-icon-btn"
+          title={t.file.newWindow}
+        >
+          <AppWindow className="w-3.5 h-3.5" />
+        </button>
         <button
           onClick={onNewFile}
           className="w-7 h-7 ui-icon-btn"
@@ -61,16 +78,6 @@ export function SidebarHeader({
           <RefreshCw
             className={cn("w-3.5 h-3.5", isLoadingTree && "animate-spin")}
           />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onMoreMenu({ x: e.clientX, y: e.clientY + 20 });
-          }}
-          className="w-7 h-7 ui-icon-btn"
-          title={t.common.settings}
-        >
-          <MoreHorizontal className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
