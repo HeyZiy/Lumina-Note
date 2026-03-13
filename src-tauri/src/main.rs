@@ -219,8 +219,7 @@ fn main() {
                 window.on_window_event(move |event| {
                     if matches!(
                         event,
-                        tauri::WindowEvent::Resized(..)
-                            | tauri::WindowEvent::ThemeChanged(..)
+                        tauri::WindowEvent::Resized(..) | tauri::WindowEvent::ThemeChanged(..)
                     ) {
                         traffic_lights::center_in_titlebar(&win);
                     }

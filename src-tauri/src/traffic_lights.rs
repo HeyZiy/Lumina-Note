@@ -68,10 +68,7 @@ pub fn center_in_titlebar<R: Runtime>(window: &tauri::WebviewWindow<R>) {
         let space_between = minimize.frame().origin.x - close.frame().origin.x;
 
         for (i, button) in [&*close, &*minimize, &*zoom].iter().enumerate() {
-            let origin = NSPoint::new(
-                BUTTON_OFFSET_X + (i as f64 * space_between),
-                centred_y,
-            );
+            let origin = NSPoint::new(BUTTON_OFFSET_X + (i as f64 * space_between), centred_y);
             button.setFrameOrigin(origin);
         }
     }
