@@ -3,11 +3,14 @@ import { cn } from '@/lib/utils';
 export const RESIZE_HANDLE_WRAPPER_CLASSNAME =
   'group relative h-full w-2 flex-shrink-0 cursor-col-resize select-none z-20';
 
-export function getResizeHandleIndicatorClassName(isActive: boolean) {
+export function getResizeHandleIndicatorClassName(isActive: boolean, direction: 'left' | 'right') {
   return cn(
-    'absolute inset-y-0 left-1/2 -translate-x-1/2 w-px rounded-full pointer-events-none',
-    'bg-border/55 opacity-0 transition-[opacity,background-color] duration-200 ease-out',
-    'group-hover:opacity-75 group-hover:bg-border/75',
-    isActive && 'opacity-85 bg-border/80'
+    'absolute inset-y-0 w-[3px] rounded-full pointer-events-none',
+    // Align with the sidebar border edge
+    direction === 'left' ? '-left-px' : '-right-px',
+    'opacity-0 bg-border/20 shadow-[0_0_5px_hsl(var(--border)/0.25)]',
+    'transition-opacity duration-200 ease-out',
+    'group-hover:opacity-100',
+    isActive && 'opacity-100 bg-border/30 shadow-[0_0_7px_hsl(var(--border)/0.35)]',
   );
 }

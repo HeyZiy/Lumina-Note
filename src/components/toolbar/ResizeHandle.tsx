@@ -111,7 +111,7 @@ export function ResizeHandle({
       )}
     >
       <div
-        className={getResizeHandleIndicatorClassName(isDragging || isHovering)}
+        className={getResizeHandleIndicatorClassName(isDragging || isHovering, direction)}
       />
       
       {/* Clickable area - 这是实际的点击区域 */}
