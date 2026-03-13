@@ -248,7 +248,12 @@ const getDiagramDisplayName = (path: string) => {
 const MOBILE_WORKSPACE_SYNC_INTERVAL = 10_000;
 let lastMobileWorkspaceSync: { path: string | null; at: number } = { path: null, at: 0 };
 
-async function syncWorkspaceAccessRoots(path: string): Promise<void> {
+/**
+ * Sync workspace path to Tauri's allowed filesystem roots.
+ * This must be called before any file operations on the vault path.
+ * Exported for testing purposes.
+ */
+export async function syncWorkspaceAccessRoots(path: string): Promise<void> {
   useWorkspaceStore.getState().registerWorkspace(path);
   const workspacePaths = Array.from(
     new Set([path, ...useWorkspaceStore.getState().workspaces.map((workspace) => workspace.path)])
