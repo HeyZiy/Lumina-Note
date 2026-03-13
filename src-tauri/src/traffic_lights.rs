@@ -58,9 +58,11 @@ pub fn observe_resize<R: Runtime>(window: &tauri::WebviewWindow<R>) {
         let name = objc2_foundation::NSString::from_str("NSWindowDidResizeNotification");
 
         let captured = ns_window_ptr;
-        let block = block2::StackBlock::new(move |_notif: std::ptr::NonNull<objc2_foundation::NSNotification>| {
-            reposition_buttons(captured);
-        });
+        let block = block2::StackBlock::new(
+            move |_notif: std::ptr::NonNull<objc2_foundation::NSNotification>| {
+                reposition_buttons(captured);
+            },
+        );
 
         let ns_window: &objc2_app_kit::NSWindow =
             &*(ns_window_ptr as *const objc2_app_kit::NSWindow);

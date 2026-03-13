@@ -4,8 +4,6 @@
 )]
 #![allow(dead_code)]
 
-#[cfg(target_os = "macos")]
-mod traffic_lights;
 mod agent;
 mod cloud_relay;
 mod codex_extension;
@@ -22,6 +20,8 @@ mod mobile_gateway;
 mod node_runtime;
 mod plugins;
 mod proxy;
+#[cfg(target_os = "macos")]
+mod traffic_lights;
 mod typesetting;
 mod update_manager;
 mod vector_db;
