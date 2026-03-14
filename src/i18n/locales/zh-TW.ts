@@ -141,7 +141,6 @@ export default {
     openClawCronToggleError: '切換 Cron 任務失敗：{error}',
     openClawCronDeleteSuccess: 'Cron 任務已刪除',
     openClawCronDeleteError: '刪除 Cron 任務失敗：{error}',
-    openClawCronLoadError: '載入 Cron 任務失敗：{error}',
   },
 
   favorites: {

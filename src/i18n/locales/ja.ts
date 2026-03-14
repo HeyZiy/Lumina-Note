@@ -141,7 +141,6 @@ export default {
     openClawCronToggleError: 'Cron ジョブの切り替えに失敗：{error}',
     openClawCronDeleteSuccess: 'Cron ジョブが削除されました',
     openClawCronDeleteError: 'Cron ジョブの削除に失敗：{error}',
-    openClawCronLoadError: 'Cron ジョブの読み込みに失敗：{error}',
   },
 
   favorites: {

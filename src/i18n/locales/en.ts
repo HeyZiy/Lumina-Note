@@ -141,7 +141,6 @@ export default {
     openClawCronToggleError: 'Failed to toggle cron job: {error}',
     openClawCronDeleteSuccess: 'Cron job deleted',
     openClawCronDeleteError: 'Failed to delete cron job: {error}',
-    openClawCronLoadError: 'Failed to load cron jobs: {error}',
   },
 
   favorites: {
