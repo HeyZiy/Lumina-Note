@@ -92,12 +92,13 @@ export function OpenClawSection({
             source: "OpenClawSection.loadCronJobs",
             action: "Load OpenClaw cron jobs",
             error,
+            userMessage: t.sidebar.openClawCronLoadError.replace('{error}', error instanceof Error ? error.message : String(error)),
           });
         }
       },
     );
     return () => { cancelled = true; };
-  }, [openClawAttachment]);
+  }, [openClawAttachment, t.sidebar.openClawCronLoadError]);
 
   const openCronEditor = useCallback((jobId?: string) => {
     try {
@@ -109,6 +110,7 @@ export function OpenClawSection({
               source: "OpenClawSection.openCronEditor",
               action: "Open cron job editor",
               error,
+              userMessage: t.sidebar.openClawCronToggleError.replace('{error}', error instanceof Error ? error.message : String(error)),
             });
           });
           return;
@@ -119,6 +121,7 @@ export function OpenClawSection({
           source: "OpenClawSection.openCronEditor",
           action: "Open cron job editor",
           error: new Error(t.sidebar.openClawCronPluginUnavailable),
+          userMessage: t.sidebar.openClawCronPluginUnavailable,
         });
       }
     } catch (error) {
@@ -126,9 +129,10 @@ export function OpenClawSection({
         source: "OpenClawSection.openCronEditor",
         action: "Open cron job editor",
         error,
+        userMessage: t.sidebar.openClawCronToggleError.replace('{error}', error instanceof Error ? error.message : String(error)),
       });
     }
-  }, [t.sidebar.openClawCronPluginUnavailable]);
+  }, [t.sidebar.openClawCronPluginUnavailable, t.sidebar.openClawCronToggleError]);
 
   if (!openClawSnapshot || (openClawSnapshot.status !== "detected" && !openClawAttachment)) {
     return null;

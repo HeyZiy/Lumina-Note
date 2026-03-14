@@ -7,6 +7,7 @@ module.exports = function setup(api) {
 
   let cachedSnapshot = null;
   let disposeUi = () => {};
+  let currentLocale = 'en';
 
   const escapeHtml = (value) =>
     String(value ?? "")
@@ -29,6 +30,214 @@ module.exports = function setup(api) {
       return normalizedPath.slice(normalizedWorkspace.length + 1);
     }
     return normalizedPath.replace(/^\/+/, "");
+  };
+
+  // ---------------------------------------------------------------------------
+  // i18n helpers
+  // ---------------------------------------------------------------------------
+
+  const t = (key, params = {}) => {
+    const translations = {
+      en: {
+        openClawCronOverview: 'Cron Jobs Overview',
+        openClawCronTotal: 'Total',
+        openClawCronName: 'Name',
+        openClawCronSchedule: 'Schedule',
+        openClawCronStatus: 'Status',
+        openClawCronTarget: 'Target',
+        openClawCronActions: 'Actions',
+        openClawCronEnable: 'Enable',
+        openClawCronDisable: 'Disable',
+        openClawCronEdit: 'Edit',
+        openClawCronDelete: 'Delete',
+        openClawCronEditorTitle: 'Cron Job Editor',
+        openClawCronCreateTitle: 'Create Cron Job',
+        openClawCronEditTitle: 'Edit Cron Job: {name}',
+        openClawCronJobName: 'Job Name',
+        openClawCronJobDescription: 'Description',
+        openClawCronScheduleKind: 'Schedule Type',
+        openClawCronScheduleExpr: 'Cron expression',
+        openClawCronScheduleEvery: 'Every interval',
+        openClawCronScheduleAt: 'At specific time',
+        openClawCronScheduleExprPlaceholder: 'e.g., 0 7 * * * (daily at 7 AM)',
+        openClawCronScheduleEveryPlaceholder: 'e.g., 3600000 (1 hour)',
+        openClawCronScheduleAtPlaceholder: 'e.g., 2026-02-01T16:00:00Z',
+        openClawCronTimezone: 'Timezone (optional)',
+        openClawCronTimezonePlaceholder: 'e.g., America/Los_Angeles',
+        openClawCronPayloadKind: 'Payload Type',
+        openClawCronPayloadAgentTurn: 'Agent Turn',
+        openClawCronPayloadSystemEvent: 'System Event',
+        openClawCronPayloadMessage: 'Message / Text',
+        openClawCronPayloadMessagePlaceholder: 'Enter the message or event text',
+        openClawCronSessionTarget: 'Session Target',
+        openClawCronSessionTargetMain: 'Main',
+        openClawCronSessionTargetIsolated: 'Isolated',
+        openClawCronEnabled: 'Enabled',
+        openClawCronDeleteAfterRun: 'Delete after run',
+        openClawCronSave: 'Save Changes',
+        openClawCronCreate: 'Create Job',
+        openClawCronSaveSuccess: 'Cron job saved successfully',
+        openClawCronSaveError: 'Failed to save cron job: {error}',
+        openClawCronToggleSuccess: 'Cron job {status}',
+        openClawCronToggleError: 'Failed to toggle cron job: {error}',
+        openClawCronDeleteSuccess: 'Cron job deleted',
+        openClawCronDeleteError: 'Failed to delete cron job: {error}',
+        openClawCronNoJobs: 'No cron jobs configured',
+        openClawCronCreateFirst: '+ Create cron job',
+      },
+      'zh-CN': {
+        openClawCronOverview: 'Cron 任务概览',
+        openClawCronTotal: '总计',
+        openClawCronName: '名称',
+        openClawCronSchedule: '计划',
+        openClawCronStatus: '状态',
+        openClawCronTarget: '目标',
+        openClawCronActions: '操作',
+        openClawCronEnable: '启用',
+        openClawCronDisable: '禁用',
+        openClawCronEdit: '编辑',
+        openClawCronDelete: '删除',
+        openClawCronEditorTitle: 'Cron 任务编辑器',
+        openClawCronCreateTitle: '新建 Cron 任务',
+        openClawCronEditTitle: '编辑 Cron 任务：{name}',
+        openClawCronJobName: '任务名称',
+        openClawCronJobDescription: '描述',
+        openClawCronScheduleKind: '计划类型',
+        openClawCronScheduleExpr: 'Cron 表达式',
+        openClawCronScheduleEvery: '每隔',
+        openClawCronScheduleAt: '在指定时间',
+        openClawCronScheduleExprPlaceholder: '例如：0 7 * * *（每天 7 点）',
+        openClawCronScheduleEveryPlaceholder: '例如：3600000（1 小时）',
+        openClawCronScheduleAtPlaceholder: '例如：2026-02-01T16:00:00Z',
+        openClawCronTimezone: '时区（可选）',
+        openClawCronTimezonePlaceholder: '例如：America/Los_Angeles',
+        openClawCronPayloadKind: '负载类型',
+        openClawCronPayloadAgentTurn: 'Agent 对话',
+        openClawCronPayloadSystemEvent: '系统事件',
+        openClawCronPayloadMessage: '消息/文本',
+        openClawCronPayloadMessagePlaceholder: '输入消息或事件文本',
+        openClawCronSessionTarget: '会话目标',
+        openClawCronSessionTargetMain: '主会话',
+        openClawCronSessionTargetIsolated: '隔离会话',
+        openClawCronEnabled: '已启用',
+        openClawCronDeleteAfterRun: '运行后删除',
+        openClawCronSave: '保存更改',
+        openClawCronCreate: '创建任务',
+        openClawCronSaveSuccess: 'Cron 任务已保存',
+        openClawCronSaveError: '保存 Cron 任务失败：{error}',
+        openClawCronToggleSuccess: 'Cron 任务已{status}',
+        openClawCronToggleError: '切换 Cron 任务失败：{error}',
+        openClawCronDeleteSuccess: 'Cron 任务已删除',
+        openClawCronDeleteError: '删除 Cron 任务失败：{error}',
+        openClawCronNoJobs: '暂无 cron 任务',
+        openClawCronCreateFirst: '+ 新建 cron 任务',
+      },
+      'zh-TW': {
+        openClawCronOverview: 'Cron 任務概覽',
+        openClawCronTotal: '總計',
+        openClawCronName: '名稱',
+        openClawCronSchedule: '計劃',
+        openClawCronStatus: '狀態',
+        openClawCronTarget: '目標',
+        openClawCronActions: '操作',
+        openClawCronEnable: '啟用',
+        openClawCronDisable: '停用',
+        openClawCronEdit: '編輯',
+        openClawCronDelete: '刪除',
+        openClawCronEditorTitle: 'Cron 任務編輯器',
+        openClawCronCreateTitle: '新建 Cron 任務',
+        openClawCronEditTitle: '編輯 Cron 任務：{name}',
+        openClawCronJobName: '任務名稱',
+        openClawCronJobDescription: '描述',
+        openClawCronScheduleKind: '計劃類型',
+        openClawCronScheduleExpr: 'Cron 表達式',
+        openClawCronScheduleEvery: '每隔',
+        openClawCronScheduleAt: '在指定時間',
+        openClawCronScheduleExprPlaceholder: '例如：0 7 * * *（每天 7 點）',
+        openClawCronScheduleEveryPlaceholder: '例如：3600000（1 小時）',
+        openClawCronScheduleAtPlaceholder: '例如：2026-02-01T16:00:00Z',
+        openClawCronTimezone: '時區（可選）',
+        openClawCronTimezonePlaceholder: '例如：America/Los_Angeles',
+        openClawCronPayloadKind: '負載類型',
+        openClawCronPayloadAgentTurn: 'Agent 對話',
+        openClawCronPayloadSystemEvent: '系統事件',
+        openClawCronPayloadMessage: '訊息/文字',
+        openClawCronPayloadMessagePlaceholder: '輸入訊息或事件文字',
+        openClawCronSessionTarget: '會話目標',
+        openClawCronSessionTargetMain: '主會話',
+        openClawCronSessionTargetIsolated: '隔離會話',
+        openClawCronEnabled: '已啟用',
+        openClawCronDeleteAfterRun: '執行後刪除',
+        openClawCronSave: '儲存變更',
+        openClawCronCreate: '建立任務',
+        openClawCronSaveSuccess: 'Cron 任務已儲存',
+        openClawCronSaveError: '儲存 Cron 任務失敗：{error}',
+        openClawCronToggleSuccess: 'Cron 任務已{status}',
+        openClawCronToggleError: '切換 Cron 任務失敗：{error}',
+        openClawCronDeleteSuccess: 'Cron 任務已刪除',
+        openClawCronDeleteError: '刪除 Cron 任務失敗：{error}',
+        openClawCronNoJobs: '尚無 cron 任務',
+        openClawCronCreateFirst: '+ 新建 cron 任務',
+      },
+      ja: {
+        openClawCronOverview: 'Cron ジョブ概要',
+        openClawCronTotal: '合計',
+        openClawCronName: '名前',
+        openClawCronSchedule: 'スケジュール',
+        openClawCronStatus: 'ステータス',
+        openClawCronTarget: 'ターゲット',
+        openClawCronActions: 'アクション',
+        openClawCronEnable: '有効',
+        openClawCronDisable: '無効',
+        openClawCronEdit: '編集',
+        openClawCronDelete: '削除',
+        openClawCronEditorTitle: 'Cron ジョブエディタ',
+        openClawCronCreateTitle: 'Cron ジョブを作成',
+        openClawCronEditTitle: 'Cron ジョブを編集：{name}',
+        openClawCronJobName: 'ジョブ名',
+        openClawCronJobDescription: '説明',
+        openClawCronScheduleKind: 'スケジュールタイプ',
+        openClawCronScheduleExpr: 'Cron 式',
+        openClawCronScheduleEvery: '毎',
+        openClawCronScheduleAt: '指定時刻',
+        openClawCronScheduleExprPlaceholder: '例：0 7 * * *（毎日午前 7 時）',
+        openClawCronScheduleEveryPlaceholder: '例：3600000（1 時間）',
+        openClawCronScheduleAtPlaceholder: '例：2026-02-01T16:00:00Z',
+        openClawCronTimezone: 'タイムゾーン（オプション）',
+        openClawCronTimezonePlaceholder: '例：America/Los_Angeles',
+        openClawCronPayloadKind: 'ペイロードタイプ',
+        openClawCronPayloadAgentTurn: 'エージェントターン',
+        openClawCronPayloadSystemEvent: 'システムイベント',
+        openClawCronPayloadMessage: 'メッセージ/テキスト',
+        openClawCronPayloadMessagePlaceholder: 'メッセージまたはイベントテキストを入力',
+        openClawCronSessionTarget: 'セッションターゲット',
+        openClawCronSessionTargetMain: 'メイン',
+        openClawCronSessionTargetIsolated: '隔離',
+        openClawCronEnabled: '有効',
+        openClawCronDeleteAfterRun: '実行後に削除',
+        openClawCronSave: '変更を保存',
+        openClawCronCreate: 'ジョブを作成',
+        openClawCronSaveSuccess: 'Cron ジョブが保存されました',
+        openClawCronSaveError: 'Cron ジョブの保存に失敗：{error}',
+        openClawCronToggleSuccess: 'Cron ジョブが{status}されました',
+        openClawCronToggleError: 'Cron ジョブの切り替えに失敗：{error}',
+        openClawCronDeleteSuccess: 'Cron ジョブが削除されました',
+        openClawCronDeleteError: 'Cron ジョブの削除に失敗：{error}',
+        openClawCronNoJobs: 'cron ジョブはまだありません',
+        openClawCronCreateFirst: '+ Cron ジョブを作成',
+      },
+    };
+
+    const locale = translations[currentLocale] || translations.en;
+    let text = locale[key] || translations.en[key] || key;
+    
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      });
+    }
+    
+    return text;
   };
 
   // ---------------------------------------------------------------------------
@@ -55,104 +264,164 @@ module.exports = function setup(api) {
   };
 
   const renderCronSection = (jobs) => {
+    const styles = {
+      container: 'style="padding:20px;background:var(--background-secondary,#f5f5f5);border-radius:8px;"',
+      header: 'style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"',
+      title: 'style="font-size:18px;font-weight:600;color:var(--text-primary,#333);margin:0;"',
+      createBtn: 'style="padding:8px 16px;background:var(--primary,#007bff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;transition:opacity 0.2s;" onmouseover="this.style.opacity=\'0.85\'" onmouseout="this.style.opacity=\'1\'"',
+      table: 'style="width:100%;border-collapse:collapse;background:var(--background,#fff);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);"',
+      th: 'style="padding:12px 16px;text-align:left;font-size:13px;font-weight:600;color:var(--text-secondary,#666);background:var(--background-tertiary,#f9f9f9);border-bottom:2px solid var(--border,#e0e0e0);"',
+      td: 'style="padding:12px 16px;font-size:14px;color:var(--text-primary,#333);border-bottom:1px solid var(--border,#e8e8e8);"',
+      code: 'style="font-family:\'JetBrains Mono\',\'Fira Code\',monospace;font-size:13px;background:var(--background-tertiary,#f5f5f5);padding:2px 6px;border-radius:4px;"',
+      status: 'style="display:inline-block;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:500;"',
+      statusEnabled: 'style="display:inline-block;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:500;background:#dcfce7;color:#16a34a;"',
+      statusDisabled: 'style="display:inline-block;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:500;background:#fee2e2;color:#dc2626;"',
+      actionBtn: 'style="padding:6px 12px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;margin-right:6px;"',
+      editBtn: 'style="padding:6px 12px;background:#dbeafe;color:#2563eb;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;margin-right:6px;" onmouseover="this.style.background=\'#bfdbfe\'" onmouseout="this.style.background=\'#dbeafe\'"',
+      deleteBtn: 'style="padding:6px 12px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;" onmouseover="this.style.background=\'#fecaca\'" onmouseout="this.style.background=\'#fee2e2\'"',
+      empty: 'style="text-align:center;padding:40px 20px;color:var(--text-secondary,#999);font-size:14px;"',
+    };
+
     if (!jobs || jobs.length === 0) {
       return [
-        '<h3 id="cron-jobs">Cron jobs</h3>',
-        "<p>No cron jobs configured.</p>",
-        '<p><button data-plugin-action="create-cron-job" style="cursor:pointer;text-decoration:underline;background:none;border:none;color:inherit;font:inherit;padding:0;">+ Create cron job</button></p>',
+        `<div ${styles.container}>`,
+        `<div ${styles.header}>`,
+        `<h3 ${styles.title}>${t('openClawCronOverview')}</h3>`,
+        `<button ${styles.createBtn} data-plugin-action="create-cron-job">${t('openClawCronCreateFirst')}</button>`,
+        "</div>",
+        `<div ${styles.empty}>${t('openClawCronNoJobs')}</div>`,
+        "</div>",
       ].join("");
     }
+
     const rows = jobs
       .map((job) => {
-        const status = job.enabled ? "enabled" : "disabled";
-        const toggleLabel = job.enabled ? "Disable" : "Enable";
+        const statusHtml = job.enabled 
+          ? `<span ${styles.statusEnabled}>● ${t('openClawCronEnabled')}</span>`
+          : `<span ${styles.statusDisabled}>○ ${t('openClawCronJobDisabled')}</span>`;
         return [
           "<tr>",
-          `<td><code>${escapeHtml(job.name)}</code></td>`,
-          `<td>${escapeHtml(humanizeSchedule(job.schedule))}</td>`,
-          `<td>${status}</td>`,
-          `<td>${escapeHtml(job.sessionTarget || "main")}</td>`,
+          `<td ${styles.td}><code ${styles.code}>${escapeHtml(job.name)}</code></td>`,
+          `<td ${styles.td}>${escapeHtml(humanizeSchedule(job.schedule))}</td>`,
+          `<td ${styles.td}>${statusHtml}</td>`,
+          `<td ${styles.td}>${escapeHtml(job.sessionTarget || t('openClawCronSessionTargetMain'))}</td>`,
           "<td>",
-          `<button data-plugin-action="toggle-cron-job" data-job-id="${escapeHtml(job.jobId)}" data-enabled="${job.enabled}" style="cursor:pointer;text-decoration:underline;background:none;border:none;color:inherit;font:inherit;padding:0;margin-right:8px;">${toggleLabel}</button>`,
-          `<button data-plugin-action="edit-cron-job" data-job-id="${escapeHtml(job.jobId)}" style="cursor:pointer;text-decoration:underline;background:none;border:none;color:inherit;font:inherit;padding:0;margin-right:8px;">Edit</button>`,
-          `<button data-plugin-action="delete-cron-job" data-job-id="${escapeHtml(job.jobId)}" style="cursor:pointer;text-decoration:underline;background:none;border:none;color:inherit;font:inherit;padding:0;">Delete</button>`,
+          `<button ${styles.actionBtn} style="${styles.actionBtn}background:var(--background-tertiary,#f0f0f0);color:var(--text-primary,#333);" onmouseover="this.style.background='#e0e0e0'" onmouseout="this.style.background='var(--background-tertiary,#f0f0f0)'" data-plugin-action="toggle-cron-job" data-job-id="${escapeHtml(job.jobId)}" data-enabled="${job.enabled}">${job.enabled ? t('openClawCronDisable') : t('openClawCronEnable')}</button>`,
+          `<button ${styles.editBtn} data-plugin-action="edit-cron-job" data-job-id="${escapeHtml(job.jobId)}">${t('openClawCronEdit')}</button>`,
+          `<button ${styles.deleteBtn} data-plugin-action="delete-cron-job" data-job-id="${escapeHtml(job.jobId)}">${t('openClawCronDelete')}</button>`,
           "</td>",
           "</tr>",
         ].join("");
       })
       .join("");
+
     return [
-      '<h3 id="cron-jobs">Cron jobs</h3>',
-      `<p><strong>Total:</strong> ${jobs.length}</p>`,
-      '<table><thead><tr><th>Name</th><th>Schedule</th><th>Status</th><th>Target</th><th>Actions</th></tr></thead>',
-      `<tbody>${rows}</tbody></table>`,
-      '<p><button data-plugin-action="create-cron-job" style="cursor:pointer;text-decoration:underline;background:none;border:none;color:inherit;font:inherit;padding:0;">+ Create cron job</button></p>',
+      `<div ${styles.container}>`,
+      `<div ${styles.header}>`,
+      `<h3 ${styles.title}>${t('openClawCronOverview')}</h3>`,
+      `<button ${styles.createBtn} data-plugin-action="create-cron-job">${t('openClawCronCreateFirst')}</button>`,
+      "</div>",
+      `<p style="margin:0 0 16px 0;font-size:14px;color:var(--text-secondary,#666);">${t('openClawCronTotal')}: ${jobs.length}</p>`,
+      `<table ${styles.table}>`,
+      `<thead><tr>`,
+      `<th ${styles.th}>${t('openClawCronName')}</th>`,
+      `<th ${styles.th}>${t('openClawCronSchedule')}</th>`,
+      `<th ${styles.th}>${t('openClawCronStatus')}</th>`,
+      `<th ${styles.th}>${t('openClawCronTarget')}</th>`,
+      `<th ${styles.th}>${t('openClawCronActions')}</th>`,
+      "</tr></thead>",
+      `<tbody>${rows}</tbody>`,
+      "</table>",
+      "</div>",
     ].join("");
   };
 
   const renderCronForm = (job) => {
     const isEdit = Boolean(job && job.jobId);
-    const title = isEdit ? `Edit cron job: ${escapeHtml(job.name)}` : "Create cron job";
+    const title = isEdit ? t('openClawCronEditTitle', { name: job.name }) : t('openClawCronCreateTitle');
     const scheduleKind = (job && job.schedule && job.schedule.kind) || "cron";
     const payloadKind = (job && job.payload && job.payload.kind) || "agentTurn";
+
+    const styles = {
+      container: 'style="padding:24px;background:var(--background-secondary,#f5f5f5);border-radius:8px;"',
+      form: 'style="background:var(--background,#fff);padding:24px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);"',
+      formGroup: 'style="margin-bottom:20px;"',
+      label: 'style="display:block;font-size:14px;font-weight:600;color:var(--text-primary,#333);margin-bottom:8px;"',
+      input: 'style="width:100%;padding:10px 12px;border:1px solid var(--border,#d0d0d0);border-radius:6px;font-size:14px;color:var(--text-primary,#333);background:var(--background,#fff);transition:border-color 0.2s;" onfocus="this.style.borderColor=\'var(--primary,#007bff)\'" onblur="this.style.borderColor=\'var(--border,#d0d0d0)\'"',
+      select: 'style="width:100%;padding:10px 12px;border:1px solid var(--border,#d0d0d0);border-radius:6px;font-size:14px;color:var(--text-primary,#333);background:var(--background,#fff);transition:border-color 0.2s;" onfocus="this.style.borderColor=\'var(--primary,#007bff)\'" onblur="this.style.borderColor=\'var(--border,#d0d0d0)\'"',
+      textarea: 'style="width:100%;padding:10px 12px;border:1px solid var(--border,#d0d0d0);border-radius:6px;font-size:14px;color:var(--text-primary,#333);background:var(--background,#fff);min-height:80px;resize:vertical;transition:border-color 0.2s;" onfocus="this.style.borderColor=\'var(--primary,#007bff)\'" onblur="this.style.borderColor=\'var(--border,#d0d0d0)\'"',
+      checkbox: 'style="margin-right:8px;"',
+      checkboxLabel: 'style="display:flex;align-items:center;font-size:14px;color:var(--text-primary,#333);cursor:pointer;"',
+      button: 'style="padding:10px 20px;background:var(--primary,#007bff);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;transition:opacity 0.2s;" onmouseover="this.style.opacity=\'0.85\'" onmouseout="this.style.opacity=\'1\'"',
+      title: 'style="font-size:20px;font-weight:600;color:var(--text-primary,#333);margin:0 0 24px 0;"',
+    };
+
     return [
-      `<h3>${title}</h3>`,
-      '<div data-plugin-form="cron-editor">',
+      `<div ${styles.container}>`,
+      `<div ${styles.form}>`,
+      `<h3 ${styles.title}>${title}</h3>`,
       isEdit ? `<input type="hidden" name="jobId" value="${escapeHtml(job.jobId)}" />` : "",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Name</label>',
-      `<input name="name" type="text" value="${escapeHtml((job && job.name) || "")}" class="ui-input" style="width:100%;" />`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${t('openClawCronJobName')}</label>`,
+      `<input name="name" type="text" value="${escapeHtml((job && job.name) || "")}" ${styles.input} />`,
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Description</label>',
-      `<input name="description" type="text" value="${escapeHtml((job && job.description) || "")}" class="ui-input" style="width:100%;" />`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${t('openClawCronJobDescription')}</label>`,
+      `<input name="description" type="text" value="${escapeHtml((job && job.description) || "")}" ${styles.input} />`,
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Schedule kind</label>',
-      '<select name="scheduleKind" class="ui-input" style="width:100%;">',
-      `<option value="cron"${scheduleKind === "cron" ? " selected" : ""}>Cron expression</option>`,
-      `<option value="every"${scheduleKind === "every" ? " selected" : ""}>Every interval</option>`,
-      `<option value="at"${scheduleKind === "at" ? " selected" : ""}>At specific time</option>`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${t('openClawCronScheduleKind')}</label>`,
+      `<select name="scheduleKind" ${styles.select}>`,
+      `<option value="cron"${scheduleKind === "cron" ? " selected" : ""}>${t('openClawCronScheduleExpr')}</option>`,
+      `<option value="every"${scheduleKind === "every" ? " selected" : ""}>${t('openClawCronScheduleEvery')}</option>`,
+      `<option value="at"${scheduleKind === "at" ? " selected" : ""}>${t('openClawCronScheduleAt')}</option>`,
       "</select>",
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Expression / interval / time</label>',
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${scheduleKind === "cron" ? t('openClawCronScheduleExpr') : scheduleKind === "every" ? t('openClawCronScheduleEvery') : t('openClawCronScheduleAt')}</label>`,
       `<input name="scheduleExpr" type="text" value="${escapeHtml(
         (job && job.schedule && (job.schedule.expr || (job.schedule.everyMs != null ? String(job.schedule.everyMs) : "") || job.schedule.at)) || ""
-      )}" class="ui-input" style="width:100%;" placeholder="0 7 * * * / 3600000 / 2026-02-01T16:00:00Z" />`,
+      )}" ${styles.input} placeholder="${scheduleKind === "cron" ? t('openClawCronScheduleExprPlaceholder') : scheduleKind === "every" ? t('openClawCronScheduleEveryPlaceholder') : t('openClawCronScheduleAtPlaceholder')}" />`,
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Timezone (optional, for cron)</label>',
-      `<input name="scheduleTz" type="text" value="${escapeHtml((job && job.schedule && job.schedule.tz) || "")}" class="ui-input" style="width:100%;" placeholder="America/Los_Angeles" />`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${t('openClawCronTimezone')}</label>`,
+      `<input name="scheduleTz" type="text" value="${escapeHtml((job && job.schedule && job.schedule.tz) || "")}" ${styles.input} placeholder="${t('openClawCronTimezonePlaceholder')}" />`,
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Payload kind</label>',
-      '<select name="payloadKind" class="ui-input" style="width:100%;">',
-      `<option value="agentTurn"${payloadKind === "agentTurn" ? " selected" : ""}>Agent turn</option>`,
-      `<option value="systemEvent"${payloadKind === "systemEvent" ? " selected" : ""}>System event</option>`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${t('openClawCronPayloadKind')}</label>`,
+      `<select name="payloadKind" ${styles.select}>`,
+      `<option value="agentTurn"${payloadKind === "agentTurn" ? " selected" : ""}>${t('openClawCronPayloadAgentTurn')}</option>`,
+      `<option value="systemEvent"${payloadKind === "systemEvent" ? " selected" : ""}>${t('openClawCronPayloadSystemEvent')}</option>`,
       "</select>",
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Message / text</label>',
-      `<textarea name="payloadText" class="ui-input" style="width:100%;min-height:60px;" placeholder="Enter the message or event text">${escapeHtml(
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${t('openClawCronPayloadMessage')}</label>`,
+      `<textarea name="payloadText" ${styles.textarea} placeholder="${t('openClawCronPayloadMessagePlaceholder')}">${escapeHtml(
         (job && job.payload && (job.payload.message || job.payload.text)) || ""
       )}</textarea>`,
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      '<label style="display:block;font-weight:600;margin-bottom:4px;">Session target</label>',
-      '<select name="sessionTarget" class="ui-input" style="width:100%;">',
-      `<option value="main"${(!job || !job.sessionTarget || job.sessionTarget === "main") ? " selected" : ""}>Main</option>`,
-      `<option value="isolated"${(job && job.sessionTarget === "isolated") ? " selected" : ""}>Isolated</option>`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.label}>${t('openClawCronSessionTarget')}</label>`,
+      `<select name="sessionTarget" ${styles.select}>`,
+      `<option value="main"${(!job || !job.sessionTarget || job.sessionTarget === "main") ? " selected" : ""}>${t('openClawCronSessionTargetMain')}</option>`,
+      `<option value="isolated"${(job && job.sessionTarget === "isolated") ? " selected" : ""}>${t('openClawCronSessionTargetIsolated')}</option>`,
       "</select>",
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      `<label><input name="enabled" type="checkbox"${(!job || job.enabled !== false) ? " checked" : ""} /> Enabled</label>`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.checkboxLabel}>`,
+      `<input name="enabled" type="checkbox" ${styles.checkbox}${(!job || job.enabled !== false) ? " checked" : ""} />`,
+      t('openClawCronEnabled'),
+      "</label>",
       "</div>",
-      '<div style="margin-bottom:12px;">',
-      `<label><input name="deleteAfterRun" type="checkbox"${(job && job.deleteAfterRun) ? " checked" : ""} /> Delete after run</label>`,
+      `<div ${styles.formGroup}>`,
+      `<label ${styles.checkboxLabel}>`,
+      `<input name="deleteAfterRun" type="checkbox" ${styles.checkbox}${(job && job.deleteAfterRun) ? " checked" : ""} />`,
+      t('openClawCronDeleteAfterRun'),
+      "</label>",
       "</div>",
-      '<div>',
-      `<button data-plugin-action="save-cron-job" style="cursor:pointer;text-decoration:underline;background:none;border:none;color:inherit;font:inherit;padding:0;">${isEdit ? "Save changes" : "Create job"}</button>`,
+      `<div>`,
+      `<button ${styles.button} data-plugin-action="save-cron-job">${isEdit ? t('openClawCronSave') : t('openClawCronCreate')}</button>`,
+      "</div>",
       "</div>",
       "</div>",
     ].join("");
@@ -444,7 +713,10 @@ module.exports = function setup(api) {
   const loadCronJobs = async () => {
     try {
       return await api.workspace.listOpenClawCronJobs();
-    } catch {
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error('[OpenClaw Cron] Failed to load cron jobs:', err);
+      api.ui.notify(t('openClawCronLoadError', { error: errorMessage }));
       return [];
     }
   };
@@ -688,30 +960,44 @@ module.exports = function setup(api) {
     actions: {
       "toggle-cron-job": async (data) => {
         const jobId = data.jobId;
-        if (!jobId) return;
+        if (!jobId) {
+          api.ui.notify(t('openClawCronSaveError', { error: 'Job ID is required' }));
+          return;
+        }
         const wasEnabled = data.enabled === "true";
         try {
           await api.workspace.updateOpenClawCronJob(jobId, { enabled: !wasEnabled });
-          api.ui.notify(`Cron job ${wasEnabled ? "disabled" : "enabled"}.`);
+          const status = wasEnabled ? t('openClawCronDisable').toLowerCase() : t('openClawCronEnable').toLowerCase();
+          api.ui.notify(t('openClawCronToggleSuccess', { status }));
           await openOverview();
         } catch (err) {
-          api.ui.notify(`Failed to toggle cron job: ${err}`);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          api.ui.notify(t('openClawCronToggleError', { error: errorMessage }));
+          console.error('[OpenClaw Cron] Failed to toggle cron job:', err);
         }
       },
       "delete-cron-job": async (data) => {
         const jobId = data.jobId;
-        if (!jobId) return;
+        if (!jobId) {
+          api.ui.notify(t('openClawCronDeleteError', { error: 'Job ID is required' }));
+          return;
+        }
         try {
           await api.workspace.deleteOpenClawCronJob(jobId);
-          api.ui.notify("Cron job deleted.");
+          api.ui.notify(t('openClawCronDeleteSuccess'));
           await openOverview();
         } catch (err) {
-          api.ui.notify(`Failed to delete cron job: ${err}`);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          api.ui.notify(t('openClawCronDeleteError', { error: errorMessage }));
+          console.error('[OpenClaw Cron] Failed to delete cron job:', err);
         }
       },
       "edit-cron-job": async (data) => {
         const jobId = data.jobId;
-        if (!jobId) return;
+        if (!jobId) {
+          api.ui.notify('Job ID is required');
+          return;
+        }
         await openCronEditor(jobId);
       },
       "create-cron-job": async () => {
@@ -722,23 +1008,31 @@ module.exports = function setup(api) {
 
   const unregisterCronEditor = api.workspace.registerTabType({
     type: CRON_EDITOR_TAB_TYPE,
-    title: "Cron Job Editor",
+    title: t('openClawCronEditorTitle'),
     render: (payload) =>
       String(payload.html || renderCronForm(null)),
     actions: {
       "save-cron-job": async (data) => {
-        const jobInput = buildCronJobFromFormData(data);
         try {
+          const jobInput = buildCronJobFromFormData(data);
+          
+          if (!jobInput.name || jobInput.name.trim() === '') {
+            api.ui.notify(t('openClawCronSaveError', { error: 'Job name is required' }));
+            return;
+          }
+          
           if (data.jobId) {
             await api.workspace.updateOpenClawCronJob(data.jobId, jobInput);
-            api.ui.notify("Cron job updated.");
+            api.ui.notify(t('openClawCronSaveSuccess'));
           } else {
             await api.workspace.createOpenClawCronJob(jobInput);
-            api.ui.notify("Cron job created.");
+            api.ui.notify(t('openClawCronSaveSuccess'));
           }
           await openOverview();
         } catch (err) {
-          api.ui.notify(`Failed to save cron job: ${err}`);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          api.ui.notify(t('openClawCronSaveError', { error: errorMessage }));
+          console.error('[OpenClaw Cron] Failed to save cron job:', err);
         }
       },
     },
