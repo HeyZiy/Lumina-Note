@@ -17,6 +17,7 @@ import { readOpenClawCronJobs, type OpenClawCronJob } from "@/services/openclaw/
 import { pluginRuntime } from "@/services/plugins/runtime";
 import { reportOperationError } from "@/lib/reportError";
 import type { FileEntry } from "@/lib/tauri";
+import { useErrorStore } from "@/stores/useErrorStore";
 
 interface MountedWorkspaceTreeItemProps {
   entry: FileEntry;
@@ -45,6 +46,7 @@ export function OpenClawSection({
   toggleMountedExpanded,
 }: OpenClawSectionProps) {
   const { t } = useLocaleStore();
+  const pushNotice = useErrorStore((state) => state.pushNotice);
   const openClawSnapshotsByHost = useOpenClawWorkspaceStore((state) => state.snapshotsByHostPath);
   const openClawAttachmentsByHost = useOpenClawWorkspaceStore((state) => state.attachmentsByHostPath);
   const openClawIntegrationEnabled = useOpenClawWorkspaceStore((state) => state.integrationEnabled);
@@ -52,6 +54,92 @@ export function OpenClawSection({
 
   const openClawSnapshot = openClawIntegrationEnabled && vaultPath ? openClawSnapshotsByHost[vaultPath] ?? null : null;
   const openClawAttachment = openClawIntegrationEnabled && vaultPath ? openClawAttachmentsByHost[vaultPath] ?? null : null;
+
+  const reportSuccessNotice = useCallback(
+    (action: string, message: string) => {
+      pushNotice({
+        title: t.sidebar.openClawActionSuccessTitle,
+        message,
+        level: "info",
+        source: "OpenClawSection",
+        action,
+      });
+    },
+    [pushNotice, t.sidebar.openClawActionSuccessTitle],
+  );
+
+  // Wrapped focusTreePath with error handling
+  const handleFocusTreePath = useCallback(
+    (targetPath: string, label: string) => {
+      try {
+        if (!targetPath) {
+          reportOperationError({
+            source: 'OpenClawSection.handleFocusTreePath',
+            action: 'Focus tree path',
+            error: new Error('Path is empty'),
+            userMessage: t.sidebar.openClawPathNotFound.replace('{label}', label),
+            level: 'warning',
+            context: { label, path: targetPath },
+          });
+          return;
+        }
+        if (!vaultPath || !targetPath.startsWith(vaultPath)) {
+          reportOperationError({
+            source: "OpenClawSection.handleFocusTreePath",
+            action: "Focus tree path",
+            error: new Error("Path is outside workspace"),
+            userMessage: t.sidebar.openClawPathOutsideWorkspace.replace("{label}", label),
+            level: "warning",
+            context: { label, path: targetPath, vaultPath },
+          });
+          return;
+        }
+        focusTreePath(targetPath);
+        reportSuccessNotice("Focus tree path", t.sidebar.openClawFocusPathSuccess.replace("{label}", label));
+      } catch (error) {
+        reportOperationError({
+          source: 'OpenClawSection.handleFocusTreePath',
+          action: 'Focus tree path',
+          error,
+          userMessage: t.sidebar.openClawFocusPathError.replace('{label}', label),
+          level: 'error',
+          context: { label, path: targetPath },
+        });
+      }
+    },
+    [focusTreePath, reportSuccessNotice, t.sidebar, vaultPath],
+  );
+
+  // Wrapped openFilteredView with error handling
+  const handleOpenFilteredView = useCallback(
+    (scopeLabel: string, pathPrefixes: string[], label: string) => {
+      try {
+        if (!pathPrefixes || pathPrefixes.length === 0) {
+          reportOperationError({
+            source: 'OpenClawSection.handleOpenFilteredView',
+            action: 'Open filtered view',
+            error: new Error('No paths provided'),
+            userMessage: t.sidebar.openClawNoPathsToSearch.replace('{label}', label),
+            level: 'warning',
+            context: { label, scopeLabel, pathPrefixes },
+          });
+          return;
+        }
+        openFilteredView(scopeLabel, pathPrefixes);
+        reportSuccessNotice("Open filtered view", t.sidebar.openClawSearchOpened.replace("{label}", label));
+      } catch (error) {
+        reportOperationError({
+          source: 'OpenClawSection.handleOpenFilteredView',
+          action: 'Open filtered view',
+          error,
+          userMessage: t.sidebar.openClawSearchError.replace('{label}', label),
+          level: 'error',
+          context: { label, scopeLabel, pathPrefixes },
+        });
+      }
+    },
+    [reportSuccessNotice, t.sidebar],
+  );
 
   const openClawRecentMemoryEntries = useMemo(
     () => openClawSnapshot?.recentMemoryPaths.slice(0, 4) ?? [],
@@ -292,7 +380,7 @@ export function OpenClawSection({
         {openClawSnapshot.memoryDirectoryPath && (
           <button
             type="button"
-            onClick={() => focusTreePath(openClawSnapshot.memoryDirectoryPath as string)}
+            onClick={() => handleFocusTreePath(openClawSnapshot.memoryDirectoryPath as string, t.sidebar.openClawMemoryFolder)}
             className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             {t.sidebar.openClawMemoryFolder}
@@ -302,7 +390,7 @@ export function OpenClawSection({
           <button
             key={path}
             type="button"
-            onClick={() => focusTreePath(path)}
+            onClick={() => handleFocusTreePath(path, getFileName(path))}
             className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             {getFileName(path)}
@@ -312,9 +400,9 @@ export function OpenClawSection({
           <button
             type="button"
             onClick={() =>
-              openFilteredView(t.sidebar.openClawSearchMemory, [
+              handleOpenFilteredView(t.sidebar.openClawSearchMemory, [
                 openClawSnapshot.memoryDirectoryPath as string,
-              ])
+              ], t.sidebar.openClawSearchMemory)
             }
             className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
           >
@@ -325,7 +413,7 @@ export function OpenClawSection({
           <button
             type="button"
             onClick={() =>
-              openFilteredView(t.sidebar.openClawSearchPlans, openClawSnapshot.planDirectoryPaths)
+              handleOpenFilteredView(t.sidebar.openClawSearchPlans, openClawSnapshot.planDirectoryPaths, t.sidebar.openClawSearchPlans)
             }
             className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
           >
@@ -336,7 +424,7 @@ export function OpenClawSection({
           <button
             type="button"
             onClick={() =>
-              openFilteredView(t.sidebar.openClawSearchArtifacts, openClawArtifactDirectories)
+              handleOpenFilteredView(t.sidebar.openClawSearchArtifacts, openClawArtifactDirectories, t.sidebar.openClawSearchArtifacts)
             }
             className="rounded-md border border-border bg-background/60 px-2 py-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
           >
